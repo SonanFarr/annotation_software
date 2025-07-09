@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>main_window</class>
+ <widget class="QMainWindow" name="main_window">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1108</width>
+    <height>600</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Ferramenta de Anotação</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <widget class="QWidget" name="verticalLayoutWidget">
+    <property name="geometry">
+     <rect>
+      <x>0</x>
+      <y>10</y>
+      <width>95</width>
+      <height>121</height>
+     </rect>
+    </property>
+    <layout class="QGridLayout" name="left_buttons_grid">
+     <item row="0" column="0">
+      <widget class="QToolButton" name="open_dir_button">
+       <property name="text">
+        <string>Abrir Diretório</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="0">
+      <widget class="QToolButton" name="change_dir_button">
+       <property name="text">
+        <string>Mudar Diretório</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="0">
+      <widget class="QToolButton" name="next_img_button">
+       <property name="text">
+        <string>Próxima Imagem</string>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="0">
+      <widget class="QToolButton" name="prev_img_button">
+       <property name="text">
+        <string>Imagem Anterior</string>
+       </property>
+      </widget>
+     </item>
+     <item row="4" column="0">
+      <widget class="QToolButton" name="save_img_button">
+       <property name="text">
+        <string>Salvar</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </widget>
+   <widget class="QFrame" name="img_frame">
+    <property name="geometry">
+     <rect>
+      <x>99</x>
+      <y>9</y>
+      <width>861</width>
+      <height>541</height>
+     </rect>
+    </property>
+    <property name="frameShape">
+     <enum>QFrame::StyledPanel</enum>
+    </property>
+    <property name="frameShadow">
+     <enum>QFrame::Raised</enum>
+    </property>
+   </widget>
+   <widget class="QListView" name="annotations_list">
+    <property name="geometry">
+     <rect>
+      <x>970</x>
+      <y>30</y>
+      <width>131</width>
+      <height>241</height>
+     </rect>
+    </property>
+   </widget>
+   <widget class="QListView" name="img_list">
+    <property name="geometry">
+     <rect>
+      <x>970</x>
+      <y>300</y>
+      <width>131</width>
+      <height>251</height>
+     </rect>
+    </property>
+   </widget>
+   <widget class="QLabel" name="annotations_list_label">
+    <property name="geometry">
+     <rect>
+      <x>970</x>
+      <y>10</y>
+      <width>131</width>
+      <height>20</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Anotações</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label">
+    <property name="geometry">
+     <rect>
+      <x>970</x>
+      <y>280</y>
+      <width>111</width>
+      <height>20</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Imagens</string>
+    </property>
+   </widget>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1108</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuArquivos">
+    <property name="title">
+     <string>Arquivos</string>
+    </property>
+   </widget>
+   <addaction name="menuArquivos"/>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
