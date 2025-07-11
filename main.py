@@ -124,6 +124,7 @@ class MainWindow(QMainWindow):
         self.open_dir_button.clicked.connect(self.open_dir)
         self.next_img_button.clicked.connect(self.next_img)
         self.prev_img_button.clicked.connect(self.prev_img)
+        self.save_img_button.clicked.connect(self.save_img)
 
     def open_dir(self):
         dir = QFileDialog.getExistingDirectory(self)
@@ -152,7 +153,9 @@ class MainWindow(QMainWindow):
                 Qt.KeepAspectRatio,
                 Qt.SmoothTransformation
             )
-            self.img_label.setPixmap(pixmap_scaled)
+            self.pixmap = pixmap_scaled
+            self.img_label.setPixmap(self.pixmap)
+
             #Atualiza a seleção da lista para a imagem atual
             index = self.img_list_model.index(self.current_index)
             self.img_list.setCurrentIndex(index)
@@ -165,13 +168,36 @@ class MainWindow(QMainWindow):
             base_name, _ = os.path.splitext(image_filename)
             txt_path = os.path.join(self.current_dir, f"{base_name}.txt")
             json_path = os.path.join(self.current_dir, f"{base_name}.json")
+            #Carrega o Json e importa as anotações
             if os.path.exists(json_path):
                 try:
                     with open(json_path, 'r', encoding='utf-8') as f:
                         self.current_json_content = json.load(f)
                         print(self.current_json_content)
+
+                        # Limpa anotações anteriores
+                        self.annotations = []
+
+                        # Recria as caixas
+                        for question in self.current_json_content.get("questions", []):
+                            box = question.get("question_box", {})
+                            classe = question.get("mark", "").lower()
+
+                            if all(k in box for k in ("x", "y", "width", "height")) and classe in ["a", "b", "c", "d", "e"]:
+                                rect = QRect(
+                                    box["x"],
+                                    box["y"],
+                                    box["width"],
+                                    box["height"]
+                                )
+                                self.annotations.append((rect, classe))
+                        #Atualiza a lista e anotações
+                        self.update_annotations_list()
+                        self.img_label.update()
+
                 except Exception as e:
                     print(f"Erro ao ler JSON: {e}")
+
             if os.path.exists(txt_path):
                 try:
                     with open(txt_path, 'r', encoding='utf-8') as f:
@@ -183,19 +209,75 @@ class MainWindow(QMainWindow):
             self.img_label.clear()
             
     def save_img(self):
-        if self.image_files:
-            #Configurando o arquivo
-            image_filename = self.image_files[self.current_index]
-            base_name, _ = os.path.splitext(image_filename)
-            txt_path = os.path.join(self.current_dir, f"{base_name}.txt")
-            json_path = os.path.join(self.current_dir, f"{base_name}.json")
-            content = f"Nome: {image_filename}\n"
-            #.txt
+        if not self.image_files:
+            return
+
+        image_filename = self.image_files[self.current_index]
+        base_name, _ = os.path.splitext(image_filename)
+        txt_path = os.path.join(self.current_dir, f"{base_name}.txt")
+        json_path = os.path.join(self.current_dir, f"{base_name}.json")
+
+        # Salvar em .txt
+            # Tamanho da imagem atual
+        img_width = self.pixmap.width()
+        img_height = self.pixmap.height()
+
+            # Classe para ID
+        mark_to_class = {
+            "a": 0,
+            "b": 1,
+            "c": 2,
+            "d": 3,
+            "e": 4
+        }
+
+        try:
             with open(txt_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            #.json
+                for rect, classe in self.annotations:
+                    if classe not in mark_to_class:
+                        continue 
+
+                    cls_id = mark_to_class[classe]
+                    # Normalização
+                    x_center = (rect.x() + rect.width() / 2) / img_width
+                    y_center = (rect.y() + rect.height() / 2) / img_height
+                    width = rect.width() / img_width
+                    height = rect.height() / img_height
+
+                    f.write(f"{cls_id} {x_center:.17f} {y_center:.17f} {width:.17f} {height:.17f}\n")
+            print(f"Arquivo TXT salvo em: {txt_path}")
+        except Exception as e:
+            print(f"Erro ao salvar TXT: {e}")
+
+        # Salvar em .json
+        data = {
+            "image": image_filename,
+            "form_id": "", 
+            "form_id_box": {}, 
+            "questions": []
+        }
+
+        for i, (rect, classe) in enumerate(self.annotations, start=1):
+            question_data = {
+                "number": i,
+                "mark": classe,
+                "question_box": {
+                    "x": rect.x(),
+                    "y": rect.y(),
+                    "width": rect.width(),
+                    "height": rect.height()
+                },
+                "number_box": {},
+                "mark_box": {}
+            }
+            data["questions"].append(question_data)
+
+        try:
             with open(json_path, 'w', encoding='utf-8') as f:
-                json.dump({"conteudo": content}, f, indent=4, ensure_ascii=False)
+                json.dump(data, f, indent=4, ensure_ascii=False)
+            print(f"Arquivo JSON salvo em: {json_path}")
+        except Exception as e:
+            print(f"Erro ao salvar JSON: {e}")
 
     def next_img(self):
         if self.image_files and self.current_index < len(self.image_files) - 1:
