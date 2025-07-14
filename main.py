@@ -15,6 +15,52 @@ from PyQt5.QtCore import QPoint
 from PyQt5.QtCore import QRect
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
 
+HANDLE = 6
+
+class AnnotationBox:
+    def __init__(self, rect: QRect, classe: str):
+        self.rect = rect 
+        self.classe = classe 
+        self.selected = False
+
+    def contains(self, point: QPoint):
+        return self.rect.contains(point)
+
+    def handle_rects(self):
+        r, h = self.rect, HANDLE // 2
+        return {
+            "tl": QRect(r.left()-h,  r.top()-h,     HANDLE, HANDLE),
+            "tr": QRect(r.right()-h, r.top()-h,     HANDLE, HANDLE),
+            "bl": QRect(r.left()-h,  r.bottom()-h,  HANDLE, HANDLE),
+            "br": QRect(r.right()-h, r.bottom()-h,  HANDLE, HANDLE),
+        }
+
+    def handle_at(self, point: QPoint):
+        for name, rc in self.handle_rects().items():
+            if rc.contains(point):
+                return name
+        return None
+
+    def move(self, dx, dy):
+        self.rect.translate(dx, dy)
+
+    def resize(self, dx, dy, handle):
+        r = self.rect
+        if handle == "tl":
+            r.setTopLeft(r.topLeft() + QPoint(dx, dy))
+        elif handle == "tr":
+            r.setTopRight(r.topRight() + QPoint(dx, dy))
+        elif handle == "bl":
+            r.setBottomLeft(r.bottomLeft() + QPoint(dx, dy))
+        elif handle == "br":
+            r.setBottomRight(r.bottomRight() + QPoint(dx, dy))
+
+        # normaliza e impõe tamanho mínimo
+        r = r.normalized()
+        if r.width()  < 10: r.setWidth(10)
+        if r.height() < 10: r.setHeight(10)
+        self.rect = r
+
 class ClassSelectionDialog(QDialog):
     def __init__(self, num_questoes, parent=None):
         super().__init__(parent)
@@ -45,7 +91,6 @@ class ClassSelectionDialog(QDialog):
     def set_answer(self, index, value):
         self.answers[index] = value
 
-        # Altera a cor dos botões: selecionado = azul, outros = padrão
         for btn in self.button_groups[index]:
             if btn.text().lower() == value:
                 btn.setStyleSheet("background-color: lightblue; font-weight: bold;")
@@ -57,42 +102,94 @@ class ClassSelectionDialog(QDialog):
             self.accept()
 
 class ImageLabel(QLabel):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.main_window = parent
+    def __init__(self, main_window):
+        super().__init__(main_window.img_frame)
+        self.main_window = main_window
         self.setMouseTracking(True)
-        self.boxes = []
+        self.mode        = None   
+        self.handle_name = None
+        self.drag_start  = None
+        self.mw = self.main_window
 
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.main_window.start_point = event.pos()
-            self.main_window.drawing = True
+    def mousePressEvent(self, ev):
+        if ev.button() != Qt.LeftButton:
+            return
 
-    def mouseMoveEvent(self, event):
-        if self.main_window.drawing:
-            self.main_window.end_point = event.pos()
+        # verifica se clicou em handle de resize
+        for box in reversed(self.mw.annotations):
+            h = box.handle_at(ev.pos())
+            if h:
+                self.mode = "resize"
+                self.handle_name = h
+                self.mw.selected_box = box
+                box.selected = True
+                self.drag_start = ev.pos()
+                self.update()
+                return
+
+        # verifica se clicou dentro de alguma caixa para mover
+        for box in reversed(self.mw.annotations):
+            if box.contains(ev.pos()):
+                self.mode = "move"
+                self.mw.selected_box = box
+                box.selected = True
+                self.drag_start = ev.pos()
+                self.update()
+                return
+
+        # clicou fora: começa a desenhar nova coluna
+        self.mw.selected_box = None
+        for b in self.mw.annotations: b.selected = False
+        self.mode = "draw"
+        self.mw.start_point = ev.pos()
+        self.mw.end_point   = ev.pos()
+        self.mw.drawing     = True
+        self.update()
+
+    def mouseMoveEvent(self, ev):
+        mw = self.main_window
+        if ev.buttons() & Qt.LeftButton:
+            if self.mode == "move" and self.mw.selected_box:
+                dx = ev.x() - self.drag_start.x()
+                dy = ev.y() - self.drag_start.y()
+                self.mw.selected_box.move(dx, dy)
+                self.drag_start = ev.pos()
+            elif self.mode == "resize" and self.mw.selected_box:
+                dx = ev.x() - self.drag_start.x()
+                dy = ev.y() - self.drag_start.y()
+                self.mw.selected_box.resize(dx, dy, self.handle_name)
+                self.drag_start = ev.pos()
+            elif self.mode == "draw" and self.mw.drawing:
+                self.mw.end_point = ev.pos()
             self.update()
 
-    def mouseReleaseEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.main_window.drawing = False
-            self.main_window.end_point = event.pos()
-            self.main_window.finalize_box()
+    def mouseReleaseEvent(self, ev):
+        mw = self.main_window
+        if self.mode == "draw" and self.mw.drawing:
+            self.mw.drawing = False
+            self.mw.end_point = ev.pos()
+            self.mw.finalize_box()  # cria as caixas‑questão
+        elif self.mode in ("move", "resize") and self.mw.selected_box:
+            self.mw.update_annotations_list() 
+        self.mode = None
+        self.drag_start = None
+        self.update()
 
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        painter = QPainter(self)
-        painter.setPen(QPen(Qt.red, 2, Qt.SolidLine))
+    def paintEvent(self, ev):
+        super().paintEvent(ev)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
 
-        # Caixa temporária que está sendo desenhada com o mouse
-        if self.main_window.drawing and self.main_window.start_point and self.main_window.end_point:
-            rect = self.main_window.get_rect()
-            painter.drawRect(rect)
+        # Caixas anotadas
+        for box in self.mw.annotations:
+            p.setPen(QPen(Qt.blue, 2))
+            p.drawRect(box.rect)
+            p.drawText(box.rect.topLeft() + QPoint(5, 15), box.classe.upper())
 
-        # Desenha cada anotação (caixas com classe)
-        for rect, classe in self.main_window.annotations:
-            painter.drawRect(rect)
-            painter.drawText(rect.topLeft() + QPoint(5, 15), classe.upper())
+        # Caixa que está sendo desenhada
+        if self.mw.drawing and self.mw.start_point and self.mw.end_point:
+            p.setPen(QPen(Qt.red, 2, Qt.DashLine))
+            p.drawRect(QRect(self.mw.start_point, self.mw.end_point).normalized())
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -101,11 +198,13 @@ class MainWindow(QMainWindow):
         self.image_files = []
         self.current_dir = ""
         self.current_index = 0
+        self.selected_box = None
         
         self.drawing = False
         self.start_point = None
         self.end_point = None
         self.annotations = []
+        self.annotations_cache = {}
         
         #Jsons e Txt da imagem
         self.current_txt_content = ""
@@ -138,75 +237,82 @@ class MainWindow(QMainWindow):
                 self.show_img()
 
     def select_img_from_list(self, index):
-        self.current_index = index.row()
-        self.show_img()
+        if index.row() != self.current_index:
+            self.cache_current_annotations()
+            self.current_index = index.row()
+            self.show_img()
+    
+    def cache_current_annotations(self):
+        if not self.image_files:
+            return
+        fname = self.image_files[self.current_index]
+        self.annotations_cache[fname] = [
+            AnnotationBox(QRect(box.rect), box.classe) for box in self.annotations
+        ]
 
+    
     def show_img(self):
-        if self.image_files:
-            caminho = os.path.join(self.current_dir, self.image_files[self.current_index])
-            image_filename = self.image_files[self.current_index]
-            pixmap = QPixmap(caminho)
-            
-            tamanho = self.img_label.size()
-            pixmap_scaled = pixmap.scaled(
-                tamanho,
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation
-            )
-            self.pixmap = pixmap_scaled
-            self.img_label.setPixmap(self.pixmap)
-
-            #Atualiza a seleção da lista para a imagem atual
-            index = self.img_list_model.index(self.current_index)
-            self.img_list.setCurrentIndex(index)
-            
-            self.annotations = []
+        if not self.image_files:
+            self.img_label.clear()
             self.update_annotations_list()
-            self.img_label.update()
-            
-            #Carrega o .json e .txt associados caso exista
-            base_name, _ = os.path.splitext(image_filename)
-            txt_path = os.path.join(self.current_dir, f"{base_name}.txt")
-            json_path = os.path.join(self.current_dir, f"{base_name}.json")
-            #Carrega o Json e importa as anotações
+            return
+
+        image_filename = self.image_files[self.current_index]
+        caminho = os.path.join(self.current_dir, image_filename)
+
+        self.annotations = []
+        self.update_annotations_list()
+        self.img_label.update()
+
+        pixmap = QPixmap(caminho)
+        self.pixmap = pixmap.scaled(
+            self.img_label.size(),
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation
+        )
+        self.img_label.setPixmap(self.pixmap)
+
+        if image_filename in self.annotations_cache:
+            # já visitada nesta sessão
+            self.annotations = [
+                AnnotationBox(QRect(box.rect), box.classe)
+                for box in self.annotations_cache[image_filename]
+            ]
+        else:
+            # tenta ler do JSON
+            json_path = os.path.join(
+                self.current_dir, f"{os.path.splitext(image_filename)[0]}.json"
+            )
             if os.path.exists(json_path):
                 try:
-                    with open(json_path, 'r', encoding='utf-8') as f:
-                        self.current_json_content = json.load(f)
-                        print(self.current_json_content)
-
-                        # Limpa anotações anteriores
-                        self.annotations = []
-
-                        # Recria as caixas
-                        for question in self.current_json_content.get("questions", []):
-                            box = question.get("question_box", {})
-                            classe = question.get("mark", "").lower()
-
-                            if all(k in box for k in ("x", "y", "width", "height")) and classe in ["a", "b", "c", "d", "e"]:
-                                rect = QRect(
-                                    box["x"],
-                                    box["y"],
-                                    box["width"],
-                                    box["height"]
-                                )
-                                self.annotations.append((rect, classe))
-                        #Atualiza a lista e anotações
-                        self.update_annotations_list()
-                        self.img_label.update()
-
+                    with open(json_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    for q in data.get("questions", []):
+                        box_d = q.get("question_box", {})
+                        classe = q.get("mark", "").lower()
+                        if {"x", "y", "width", "height"} <= box_d.keys():
+                            rect = QRect(
+                                box_d["x"], box_d["y"],
+                                box_d["width"], box_d["height"]
+                            )
+                            self.annotations.append(AnnotationBox(rect, classe))
                 except Exception as e:
                     print(f"Erro ao ler JSON: {e}")
+                    
+        self.update_annotations_list()
+        self.img_label.update()
 
-            if os.path.exists(txt_path):
-                try:
-                    with open(txt_path, 'r', encoding='utf-8') as f:
-                        self.current_txt_content = f.read()
-                        print (f"{self.current_txt_content}")
-                except Exception as e:
-                    print(f"Erro ao ler TXT: {e}")
-        else:
-            self.img_label.clear()
+
+
+            
+    def update_annotations_list(self):
+        linhas = [
+            f"{i+1}: {box.classe} – ({box.rect.x()}, {box.rect.y()}, "
+            f"{box.rect.width()}, {box.rect.height()})"
+            for i, box in enumerate(self.annotations)
+        ]
+        self.annotations_list.setModel(QStringListModel(linhas))
+
             
     def save_img(self):
         if not self.image_files:
@@ -257,15 +363,15 @@ class MainWindow(QMainWindow):
             "questions": []
         }
 
-        for i, (rect, classe) in enumerate(self.annotations, start=1):
+        for i, box in enumerate(self.annotations, start=1):
             question_data = {
                 "number": i,
-                "mark": classe,
+                "mark": box.classe,
                 "question_box": {
-                    "x": rect.x(),
-                    "y": rect.y(),
-                    "width": rect.width(),
-                    "height": rect.height()
+                    "x": box.rect.x(),
+                    "y": box.rect.y(),
+                    "width": box.rect.width(),
+                    "height": box.rect.height()
                 },
                 "number_box": {},
                 "mark_box": {}
@@ -281,11 +387,13 @@ class MainWindow(QMainWindow):
 
     def next_img(self):
         if self.image_files and self.current_index < len(self.image_files) - 1:
+            self.cache_current_annotations()
             self.current_index += 1
             self.show_img()
 
     def prev_img(self):
         if self.image_files and self.current_index > 0:
+            self.cache_current_annotations()
             self.current_index -= 1
             self.show_img()
             
@@ -329,19 +437,15 @@ class MainWindow(QMainWindow):
 
             boxes = []
             for i in range(num_caixas):
-                # 1️⃣ Centro da caixa original
                 center_y = rect.top() + (i + 0.5) * step
 
-                # 2️⃣ Aumenta altura igualmente para cima e para baixo
                 h_orig = step
                 delta_h = h_orig * frac
                 new_h = h_orig + delta_h
 
-                # 3️⃣ Topo baseado no centro (sem deslocar o centro)
                 top = center_y - new_h / 2
                 bottom = center_y + new_h / 2
 
-                # 4️⃣ Clamps opcionais para manter dentro da coluna
                 if top < rect.top():
                     top = rect.top()
                     bottom = top + new_h
@@ -349,7 +453,6 @@ class MainWindow(QMainWindow):
                     bottom = rect.bottom()
                     top = bottom - new_h
 
-                # 5️⃣ Cria QRect
                 sub_rect = QRect(
                     int(round(left)),
                     int(round(top)),
@@ -360,17 +463,35 @@ class MainWindow(QMainWindow):
                 classe = dialog.answers[i]
                 if classe:
                     boxes.append((sub_rect, classe))
-                    self.annotations.append((sub_rect, classe))
+                    self.annotations.append(AnnotationBox(sub_rect, classe))
 
             self.update_annotations_list()
             self.img_label.update()
+            
+    def load_annotations(self, img_path):
+        import json, os
+        base, _ = os.path.splitext(img_path)
+        json_file = base + ".json"
+        self.annotations.clear()
+        if os.path.exists(json_file):
+            with open(json_file, "r", encoding="utf-8") as fp:
+                data = json.load(fp)
+            for item in data:
+                rect = QRect(item["x"], item["y"], item["width"], item["height"])
+                self.annotations.append(AnnotationBox(rect, item["mark"]))
+        self.update_annotations_list()
+        self.img_label.update()
+
 
 
     def update_annotations_list(self):
-        from PyQt5.QtCore import QStringListModel
-        #lista = [f"{i+1}: Classe {c} - {r}" for i, (r, c) in enumerate(self.annotations)]
-        lista = [f"{i+1}: Classe {c} - ({r.x()}, {r.y()}, {r.width()}, {r.height()})" for i, (r, c) in enumerate(self.annotations)]
-        model = QStringListModel(lista)
+        linhas = [
+            f"{i+1}: Classe {box.classe} - "
+            f"({box.rect.x()}, {box.rect.y()}, "
+            f"{box.rect.width()}, {box.rect.height()})"
+            for i, box in enumerate(self.annotations)
+        ]
+        model = QStringListModel(linhas)
         self.annotations_list.setModel(model)
 
     
