@@ -307,18 +307,64 @@ class MainWindow(QMainWindow):
         if num_caixas == 0:
             return
 
-        # Mostra o diálogo com os botões
         dialog = ClassSelectionDialog(num_caixas, self)
         if dialog.exec_() == QDialog.Accepted:
+
+            frac, ok_frac = QInputDialog.getDouble(
+                self,
+                "Fração de aumento",
+                "Informe a fração de aumento da altura (ex: 0.1 para 10%):",
+                value=0.10,
+                min=0.0,
+                max=1.0,
+                decimals=2
+            )
+            if not ok_frac:
+                frac = 0.0
+
+            total_h = rect.height()
+            step = total_h / num_caixas
+            width = rect.width()
+            left = rect.left()
+
             boxes = []
             for i in range(num_caixas):
-                sub_rect = QRect(rect.left(), rect.top() + i * altura_media, rect.width(), altura_media)
+                # 1️⃣ Centro da caixa original
+                center_y = rect.top() + (i + 0.5) * step
+
+                # 2️⃣ Aumenta altura igualmente para cima e para baixo
+                h_orig = step
+                delta_h = h_orig * frac
+                new_h = h_orig + delta_h
+
+                # 3️⃣ Topo baseado no centro (sem deslocar o centro)
+                top = center_y - new_h / 2
+                bottom = center_y + new_h / 2
+
+                # 4️⃣ Clamps opcionais para manter dentro da coluna
+                if top < rect.top():
+                    top = rect.top()
+                    bottom = top + new_h
+                if bottom > rect.bottom():
+                    bottom = rect.bottom()
+                    top = bottom - new_h
+
+                # 5️⃣ Cria QRect
+                sub_rect = QRect(
+                    int(round(left)),
+                    int(round(top)),
+                    int(round(width)),
+                    int(round(bottom - top))
+                )
+
                 classe = dialog.answers[i]
                 if classe:
                     boxes.append((sub_rect, classe))
                     self.annotations.append((sub_rect, classe))
+
             self.update_annotations_list()
             self.img_label.update()
+
 
     def update_annotations_list(self):
         from PyQt5.QtCore import QStringListModel
