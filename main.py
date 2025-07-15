@@ -251,6 +251,7 @@ class MainWindow(QMainWindow):
         self.prev_img_button.clicked.connect(self.prev_img)
         self.save_img_button.clicked.connect(self.save_img)
 
+
     def open_dir(self):
         dir = QFileDialog.getExistingDirectory(self)
         if dir:
@@ -275,7 +276,6 @@ class MainWindow(QMainWindow):
         self.annotations_cache[fname] = [
             AnnotationBox(QRect(box.rect), box.classe) for box in self.annotations
         ]
-
     
     def show_img(self):
         if not self.image_files:
