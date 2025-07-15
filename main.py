@@ -1,7 +1,5 @@
 import sys
 import os
-import numpy as np
-from PyQt5.QtGui import QImage
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QLabel
 from PyQt5.QtGui import QPixmap
@@ -9,11 +7,17 @@ from PyQt5.QtCore import QStringListModel
 from PyQt5 import uic
 import json
 
-from PyQt5.QtWidgets import QLabel, QInputDialog
 from PyQt5.QtGui import QPainter, QPen
 from PyQt5.QtCore import QPoint
 from PyQt5.QtCore import QRect
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
+
+from PyQt5.QtWidgets import (
+    QDialog, QHBoxLayout, QVBoxLayout, QGridLayout,
+    QLabel, QPushButton, QSizePolicy, QScrollArea, QWidget
+)
+from PyQt5.QtCore import Qt
+import math
 
 HANDLE = 6
 
@@ -62,44 +66,68 @@ class AnnotationBox:
         self.rect = r
 
 class ClassSelectionDialog(QDialog):
-    def __init__(self, num_questoes, parent=None):
+    def __init__(self, num_questoes, opcoes, start_num, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Selecionar Classe das Questões")
         self.answers = [None] * num_questoes
+        self.button_groups = []
 
-        self.button_groups = []  # Armazena os botões de cada questão
-        layout = QVBoxLayout()
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        inner  = QWidget(scroll)
+        grid   = QGridLayout(inner)
+        inner.setLayout(grid)
+        scroll.setWidget(inner)
+
+        # largura aproximada de cada bloco
+        col_width = 1080
+        screen_w  = self.screen().availableGeometry().width()
+        max_cols  = max(1, screen_w // col_width)          # quantas colunas cabem
+        rows      = math.ceil(num_questoes / max_cols)     # número de linhas necessárias
 
         for i in range(num_questoes):
+            # bloco horizontal
             hbox = QHBoxLayout()
-            label = QLabel(f"Questão {i+1}:")
-            hbox.addWidget(label)
+            hbox.addWidget(QLabel(f"Questão {start_num + i}:"))
 
             buttons = []
-            for opcao in ["a", "b", "c", "d"]:
+            for opcao in opcoes:
                 btn = QPushButton(opcao.upper())
                 btn.setCheckable(True)
-                btn.clicked.connect(lambda _, i=i, opcao=opcao: self.set_answer(i, opcao))
+                btn.clicked.connect(
+                    lambda _, j=i, o=opcao: self.set_answer(j, o)
+                )
                 hbox.addWidget(btn)
                 buttons.append(btn)
-
             self.button_groups.append(buttons)
-            layout.addLayout(hbox)
 
-        self.setLayout(layout)
+            bloco = QWidget()
+            bloco.setLayout(hbox)
+            bloco.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
 
-    def set_answer(self, index, value):
-        self.answers[index] = value
+            row = i % rows
+            col = i // rows
+            grid.addWidget(bloco, row, col, Qt.AlignTop)
+        
+        # layout principal
+        main = QVBoxLayout(self)
+        main.addWidget(scroll)
+        self.setLayout(main)
+        
+        LARGURA_FIXA = 650
+        ALTURA_FIXA  = 480
+        self.setFixedSize(LARGURA_FIXA, ALTURA_FIXA)
 
-        for btn in self.button_groups[index]:
-            if btn.text().lower() == value:
-                btn.setStyleSheet("background-color: lightblue; font-weight: bold;")
-            else:
-                btn.setStyleSheet("")
-
-        # Fecha automaticamente quando todas forem selecionadas
-        if all(a is not None for a in self.answers):
+    def set_answer(self, idx: int, val: str):
+        self.answers[idx] = val
+        for btn in self.button_groups[idx]:
+            btn.setStyleSheet(
+                "background: lightblue; font-weight:bold;" if btn.text().lower() == val
+                else ""
+            )
+        if all(self.answers):
             self.accept()
+
 
 class ImageLabel(QLabel):
     def __init__(self, main_window):
@@ -147,7 +175,6 @@ class ImageLabel(QLabel):
         self.update()
 
     def mouseMoveEvent(self, ev):
-        mw = self.main_window
         if ev.buttons() & Qt.LeftButton:
             if self.mode == "move" and self.mw.selected_box:
                 dx = ev.x() - self.drag_start.x()
@@ -164,7 +191,6 @@ class ImageLabel(QLabel):
             self.update()
 
     def mouseReleaseEvent(self, ev):
-        mw = self.main_window
         if self.mode == "draw" and self.mw.drawing:
             self.mw.drawing = False
             self.mw.end_point = ev.pos()
@@ -301,9 +327,6 @@ class MainWindow(QMainWindow):
                     
         self.update_annotations_list()
         self.img_label.update()
-
-
-
             
     def update_annotations_list(self):
         linhas = [
@@ -324,11 +347,11 @@ class MainWindow(QMainWindow):
         json_path = os.path.join(self.current_dir, f"{base_name}.json")
 
         # Salvar em .txt
-            # Tamanho da imagem atual
+        # Tamanho da imagem atual
         img_width = self.pixmap.width()
         img_height = self.pixmap.height()
 
-            # Classe para ID
+        # Classe para ID
         mark_to_class = {
             "a": 0,
             "b": 1,
@@ -405,68 +428,49 @@ class MainWindow(QMainWindow):
     def finalize_box(self):
         rect = self.get_rect()
         if rect.height() < 10 or rect.width() < 10:
-            return  # ignora regiões pequenas
-
-        altura_media, ok = QInputDialog.getInt(self, "Altura Média", "Informe a altura média das questões:", min=1)
-        if not ok:
             return
 
-        num_caixas = rect.height() // altura_media
+        LIMIAR_LARGURA = 200
+        opcoes = ["a", "b", "c"] if rect.width() < LIMIAR_LARGURA else ["a", "b", "c", "d", "e", "f"]
+
+        altura_media = 14
+        num_caixas   = int(rect.height() // altura_media)
         if num_caixas == 0:
             return
+        
+        start_num = len(self.annotations) + 1
+        
+        dialog = ClassSelectionDialog(num_caixas, opcoes, start_num, self)
+        if dialog.exec_() != QDialog.Accepted:
+            return
 
-        dialog = ClassSelectionDialog(num_caixas, self)
-        if dialog.exec_() == QDialog.Accepted:
+        frac      = 0.15                   
+        total_h   = rect.height()
+        step      = total_h / num_caixas
+        width     = rect.width()
+        left      = rect.left()
 
-            frac, ok_frac = QInputDialog.getDouble(
-                self,
-                "Fração de aumento",
-                "Informe a fração de aumento da altura (ex: 0.1 para 10%):",
-                value=0.10,
-                min=0.0,
-                max=1.0,
-                decimals=2
+        for i in range(num_caixas):
+            center_y = rect.top() + (i + 0.5) * step
+            new_h    = step * (1 + frac)
+
+            top    = max(rect.top(),    center_y - new_h / 2)
+            bottom = min(rect.bottom(), center_y + new_h / 2)
+
+            sub_rect = QRect(
+                int(round(left)),
+                int(round(top)),
+                int(round(width)),
+                int(round(bottom - top))
             )
-            if not ok_frac:
-                frac = 0.0
 
-            total_h = rect.height()
-            step = total_h / num_caixas
-            width = rect.width()
-            left = rect.left()
+            classe = dialog.answers[i]
+            if classe:
+                self.annotations.append(AnnotationBox(sub_rect, classe))
 
-            boxes = []
-            for i in range(num_caixas):
-                center_y = rect.top() + (i + 0.5) * step
+        self.update_annotations_list()
+        self.img_label.update()
 
-                h_orig = step
-                delta_h = h_orig * frac
-                new_h = h_orig + delta_h
-
-                top = center_y - new_h / 2
-                bottom = center_y + new_h / 2
-
-                if top < rect.top():
-                    top = rect.top()
-                    bottom = top + new_h
-                if bottom > rect.bottom():
-                    bottom = rect.bottom()
-                    top = bottom - new_h
-
-                sub_rect = QRect(
-                    int(round(left)),
-                    int(round(top)),
-                    int(round(width)),
-                    int(round(bottom - top))
-                )
-
-                classe = dialog.answers[i]
-                if classe:
-                    boxes.append((sub_rect, classe))
-                    self.annotations.append(AnnotationBox(sub_rect, classe))
-
-            self.update_annotations_list()
-            self.img_label.update()
             
     def load_annotations(self, img_path):
         import json, os
