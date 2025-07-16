@@ -71,6 +71,7 @@ class ClassSelectionDialog(QDialog):
         self.setWindowTitle("Selecionar Classe das Questões")
         self.answers = [None] * num_questoes
         self.button_groups = []
+        self.opcoes = opcoes
 
         scroll = QScrollArea(self)
         scroll.setWidgetResizable(True)
@@ -128,6 +129,25 @@ class ClassSelectionDialog(QDialog):
         if all(self.answers):
             self.accept()
 
+    #shortcut para marcação
+    def keyPressEvent(self, event):
+        key = event.text().lower()
+        #Pela letra
+        if key in self.opcoes:
+            for i, answer in enumerate(self.answers):
+                if answer is None:
+                    self.set_answer(i, key)
+                    break
+
+        #Pelo número
+        if key.isdigit():
+            idx = int(key) - 1
+            if 0 <= idx < len(self.opcoes):
+                letra = self.opcoes[idx]
+                for i, answer in enumerate(self.answers):
+                    if answer is None:
+                        self.set_answer(i, letra)
+                        break
 
 class ImageLabel(QLabel):
     def __init__(self, main_window):
