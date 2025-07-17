@@ -9,8 +9,8 @@ import json
 
 from PyQt5.QtGui import QPainter, QPen
 from PyQt5.QtCore import QPoint
-from PyQt5.QtCore import QRect
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
+from PyQt5.QtCore import QRect, QTimer
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QGraphicsView, QGraphicsScene
 
 from PyQt5.QtWidgets import (
     QDialog, QHBoxLayout, QVBoxLayout, QGridLayout,
@@ -299,12 +299,38 @@ class MainWindow(QMainWindow):
         self.img_list.setModel(self.img_list_model)
         self.img_list.clicked.connect(self.select_img_from_list)
 
+        self.img_label.setParent(None)
+        self.scene = QGraphicsScene(self)
+        self.view = QGraphicsView(self.scene)
+        self.view.setRenderHints(self.view.renderHints())
+        layout = QVBoxLayout(self.img_frame)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.view)
+        self.proxy = self.scene.addWidget(self.img_label)
+        self.view.fitInView(self.proxy, Qt.KeepAspectRatio)
+        self.img_frame.setGeometry(self.imgFrame.rect())
+
         # Botões
         self.open_dir_button.clicked.connect(self.open_dir)
         self.next_img_button.clicked.connect(self.next_img)
         self.prev_img_button.clicked.connect(self.prev_img)
         self.save_img_button.clicked.connect(self.save_img)
 
+        # Espera um tempo para ajustar o tamanho do img_frame corretamente
+        QTimer.singleShot(0, self.resize_img_frame)
+
+    def wheelEvent(self, event):
+        if event.angleDelta().y() > 0:
+            self.view.scale(1.1, 1.1)
+        else:
+            self.view.scale(1/1.1, 1/1.1)
+
+    def resizeEvent(self, ev):
+        super().resizeEvent(ev)
+        self.resize_img_frame()
+
+    def resize_img_frame(self):
+        self.img_frame.setGeometry(self.imgFrame.rect())
 
     def open_dir(self):
         dir = QFileDialog.getExistingDirectory(self)
