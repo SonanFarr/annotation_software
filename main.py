@@ -66,12 +66,13 @@ class AnnotationBox:
         self.rect = r
 
 class ClassSelectionDialog(QDialog):
-    def __init__(self, num_questoes, opcoes, start_num, parent=None):
+    def __init__(self, num_questoes, opcoes, start_num, callback=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Selecionar Classe das Questões")
         self.answers = [None] * num_questoes
         self.button_groups = []
         self.opcoes = opcoes
+        self.callback = callback
 
         scroll = QScrollArea(self)
         scroll.setWidgetResizable(True)
@@ -118,14 +119,17 @@ class ClassSelectionDialog(QDialog):
         LARGURA_FIXA = 650
         ALTURA_FIXA  = 480
         self.setFixedSize(LARGURA_FIXA, ALTURA_FIXA)
-
+    
     def set_answer(self, idx: int, val: str):
         self.answers[idx] = val
         for btn in self.button_groups[idx]:
             btn.setStyleSheet(
-                "background: lightblue; font-weight:bold;" if btn.text().lower() == val
-                else ""
+                "background: lightblue; font-weight:bold;" if btn.text().lower() == val else ""
             )
+        
+        if self.callback:
+            self.callback(idx, val)
+
         if all(self.answers):
             self.accept()
 
@@ -169,13 +173,19 @@ class ImageLabel(QLabel):
             if h:
                 self.mode = "resize"
                 self.handle_name = h
+
+                for b in self.mw.annotations:
+                    b.selected = False
                 self.mw.selected_box = box
                 box.selected = True
+
+                
                 self.drag_start = ev.pos()
                 self.update()
                 return
 
-        # verifica se clicou dentro de alguma caixa para mover
+        for b in self.mw.annotations:
+            b.selected = False  # desmarca todas
         for box in reversed(self.mw.annotations):
             if box.contains(ev.pos()):
                 self.mode = "move"
@@ -185,6 +195,7 @@ class ImageLabel(QLabel):
                 self.update()
                 return
 
+        
         # clicou fora: começa a desenhar nova coluna
         self.mw.selected_box = None
         for b in self.mw.annotations: b.selected = False
@@ -220,18 +231,40 @@ class ImageLabel(QLabel):
         self.mode = None
         self.drag_start = None
         self.update()
-
+    
     def paintEvent(self, ev):
         super().paintEvent(ev)
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
 
-        # Caixas anotadas
+        font = p.font()
+        font.setPointSize(12)
+        font.setBold(False)
+        p.setFont(font)
+        
         for box in self.mw.annotations:
-            p.setPen(QPen(Qt.blue, 2))
-            p.drawRect(box.rect)
+            if box.selected:
+                # Caixa selecionada: borda verde
+                p.setPen(QPen(Qt.green, 2, Qt.SolidLine))
+                p.setBrush(Qt.NoBrush)  # Sem preenchimento
+                p.drawRect(box.rect)
+
+                # Desenha handles (pequenos quadrados verdes)
+                p.setBrush(Qt.green)
+                for handle_rect in box.handle_rects().values():
+                    p.drawRect(handle_rect)
+                p.setBrush(Qt.NoBrush)  # Limpa o brush para não afetar as próximas caixas
+            else:
+                # Caixa não selecionada: borda azul
+                p.setPen(QPen(Qt.blue, 2))
+                p.setBrush(Qt.NoBrush)  # Garante sem preenchimento
+                p.drawRect(box.rect)
+
+            # Texto da classe (sempre em vermelho)
+            p.setPen(QPen(Qt.red, 2))
             p.drawText(box.rect.topLeft() + QPoint(5, 15), box.classe.upper())
 
+        
         # Caixa que está sendo desenhada
         if self.mw.drawing and self.mw.start_point and self.mw.end_point:
             p.setPen(QPen(Qt.red, 2, Qt.DashLine))
@@ -251,8 +284,8 @@ class MainWindow(QMainWindow):
         self.end_point = None
         self.annotations = []
         self.annotations_cache = {}
-        self.column_coordinates = [] 
-
+        self.column_coordinates = []
+        
         #Jsons e Txt da imagem
         self.current_txt_content = ""
         self.current_json_content = {}
@@ -265,7 +298,6 @@ class MainWindow(QMainWindow):
         self.img_list_model = QStringListModel()
         self.img_list.setModel(self.img_list_model)
         self.img_list.clicked.connect(self.select_img_from_list)
-
 
         # Botões
         self.open_dir_button.clicked.connect(self.open_dir)
@@ -404,10 +436,11 @@ class MainWindow(QMainWindow):
         data = {
             "image": image_filename,
             "form_id": "", 
-            "form_id_box": {}, 
-            "columns": [],
+            "form_id_box": {},
+            "columns": [], 
             "questions": []
         }
+        
         for cr in self.column_coordinates:
             data["columns"].append({
                "x": cr.x(),
@@ -454,52 +487,70 @@ class MainWindow(QMainWindow):
         if not self.start_point or not self.end_point:
             return QRect()
         return QRect(self.start_point, self.end_point).normalized()
-
+    
     def finalize_box(self):
         rect = self.get_rect()
         if rect.height() < 10 or rect.width() < 10:
             return
 
+        self.column_coordinates.append(rect)
+        
         LIMIAR_LARGURA = 200
-        opcoes = ["a", "b", "c"] if rect.width() < LIMIAR_LARGURA else ["a", "b", "c", "d", "e", "f"]
+        opcoes = ["a", "b", "c", "branco"] if rect.width() < LIMIAR_LARGURA else ["a", "b", "c", "d", "e", "f", "branco"]
 
         altura_media = 14
-        num_caixas   = int(rect.height() // altura_media)
+        num_caixas = int(rect.height() // altura_media)
         if num_caixas == 0:
             return
-        
+
         start_num = len(self.annotations) + 1
-        
-        dialog = ClassSelectionDialog(num_caixas, opcoes, start_num, self)
-        if dialog.exec_() != QDialog.Accepted:
-            return
+        total_h = rect.height()
+        step = total_h / num_caixas
+        width = rect.width()
+        left = rect.left()
+        frac = 0.15
 
-        frac      = 0.15                   
-        total_h   = rect.height()
-        step      = total_h / num_caixas
-        width     = rect.width()
-        left      = rect.left()
-
+        # Lista dos retângulos das caixas
+        self.temp_rects = []
         for i in range(num_caixas):
             center_y = rect.top() + (i + 0.5) * step
-            new_h    = step * (1 + frac)
-
-            top    = max(rect.top(),    center_y - new_h / 2)
+            new_h = step * (1 + frac)
+            top = max(rect.top(), center_y - new_h / 2)
             bottom = min(rect.bottom(), center_y + new_h / 2)
-
             sub_rect = QRect(
                 int(round(left)),
                 int(round(top)),
                 int(round(width)),
                 int(round(bottom - top))
             )
+            self.temp_rects.append(sub_rect)
 
-            classe = dialog.answers[i]
-            if classe:
-                self.annotations.append(AnnotationBox(sub_rect, classe))
-        self.column_coordinates.append(rect)
-        self.update_annotations_list()
-        self.img_label.update()
+        # Dicionário para armazenar classe associada ao índice
+        self.temp_annotations = {}
+
+        # Callback acionado ao selecionar a classe de uma questão
+        def class_callback(idx, val):
+            if 0 <= idx < len(self.temp_rects):
+                rect = self.temp_rects[idx]
+                self.temp_annotations[idx] = (rect, val)
+
+                # Verifica se já existe um box para esse rect
+                for ann in self.annotations:
+                    if ann.rect == rect:
+                        ann.classe = val
+                        break
+                else:
+                    self.annotations.append(AnnotationBox(rect, val))
+
+                self.update_annotations_list()
+                self.img_label.update()
+
+        # Mostra o diálogo com a função de callback
+        dialog = ClassSelectionDialog(num_caixas, opcoes, start_num, callback=class_callback, parent=self)
+        dialog.exec_()
+
+        self.temp_rects = []
+        self.temp_annotations = {}
 
             
     def load_annotations(self, img_path):
@@ -519,8 +570,6 @@ class MainWindow(QMainWindow):
                 self.annotations.append(AnnotationBox(rect, item["mark"]))
         self.update_annotations_list()
         self.img_label.update()
-
-
 
     def update_annotations_list(self):
         linhas = [
