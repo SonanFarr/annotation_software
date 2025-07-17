@@ -251,7 +251,8 @@ class MainWindow(QMainWindow):
         self.end_point = None
         self.annotations = []
         self.annotations_cache = {}
-        
+        self.column_coordinates = [] 
+
         #Jsons e Txt da imagem
         self.current_txt_content = ""
         self.current_json_content = {}
@@ -264,6 +265,7 @@ class MainWindow(QMainWindow):
         self.img_list_model = QStringListModel()
         self.img_list.setModel(self.img_list_model)
         self.img_list.clicked.connect(self.select_img_from_list)
+
 
         # Botões
         self.open_dir_button.clicked.connect(self.open_dir)
@@ -403,8 +405,16 @@ class MainWindow(QMainWindow):
             "image": image_filename,
             "form_id": "", 
             "form_id_box": {}, 
+            "columns": [],
             "questions": []
         }
+        for cr in self.column_coordinates:
+            data["columns"].append({
+               "x": cr.x(),
+                "y": cr.y(),
+                "width": cr.width(),
+                "height": cr.height()
+            })
 
         for i, box in enumerate(self.annotations, start=1):
             question_data = {
@@ -487,7 +497,7 @@ class MainWindow(QMainWindow):
             classe = dialog.answers[i]
             if classe:
                 self.annotations.append(AnnotationBox(sub_rect, classe))
-
+        self.column_coordinates.append(rect)
         self.update_annotations_list()
         self.img_label.update()
 
@@ -497,9 +507,13 @@ class MainWindow(QMainWindow):
         base, _ = os.path.splitext(img_path)
         json_file = base + ".json"
         self.annotations.clear()
+        self.column_coordinates.clear()
         if os.path.exists(json_file):
             with open(json_file, "r", encoding="utf-8") as fp:
                 data = json.load(fp)
+            for col in data.get("columns", []):
+                cr = QRect(col["x"], col["y"], col["width"], col["height"])
+                self.column_coordinates.append(cr)
             for item in data:
                 rect = QRect(item["x"], item["y"], item["width"], item["height"])
                 self.annotations.append(AnnotationBox(rect, item["mark"]))
