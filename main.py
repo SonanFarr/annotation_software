@@ -236,11 +236,6 @@ class ImageLabel(QLabel):
         super().paintEvent(ev)
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-
-        font = p.font()
-        font.setPointSize(12)
-        font.setBold(False)
-        p.setFont(font)
         
         for box in self.mw.annotations:
             if box.selected:
@@ -261,7 +256,11 @@ class ImageLabel(QLabel):
                 p.drawRect(box.rect)
 
             # Texto da classe (sempre em vermelho)
-            p.setPen(QPen(Qt.red, 2))
+            font = p.font()
+            font.setPointSize(15)
+            font.setBold(False)
+            p.setFont(font)
+            p.setPen(QPen(Qt.yellow, 1))
             p.drawText(box.rect.topLeft() + QPoint(5, 15), box.classe.upper())
 
         
@@ -318,7 +317,19 @@ class MainWindow(QMainWindow):
 
         # Espera um tempo para ajustar o tamanho do img_frame corretamente
         QTimer.singleShot(0, self.resize_img_frame)
+        
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.setFocus()
 
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Z:
+            if self.selected_box and self.selected_box in self.annotations:
+                self.annotations.remove(self.selected_box)
+                self.selected_box = None
+                self.update_annotations_list()
+                self.img_label.update()
+    
     def wheelEvent(self, event):
         if event.angleDelta().y() > 0:
             self.view.scale(1.1, 1.1)
