@@ -381,22 +381,19 @@ class MainWindow(QMainWindow):
         self.update_annotations_list()
         self.img_label.update()
 
+        #Imagem é carregada em seu tamanho original
         pixmap = QPixmap(caminho)
-        self.pixmap = pixmap.scaled(
-            self.img_label.size(),
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation
-        )
+        self.pixmap = QPixmap(caminho)
+        self.img_label.resize(self.pixmap.size())
         self.img_label.setPixmap(self.pixmap)
 
         if image_filename in self.annotations_cache:
-            # já visitada nesta sessão
             self.annotations = [
                 AnnotationBox(QRect(box.rect), box.classe)
                 for box in self.annotations_cache[image_filename]
             ]
         else:
-            # tenta ler do JSON
+            # Carrega imagem do Json
             json_path = os.path.join(
                 self.current_dir, f"{os.path.splitext(image_filename)[0]}.json"
             )
