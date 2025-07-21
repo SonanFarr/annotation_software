@@ -577,7 +577,7 @@ class MainWindow(QMainWindow):
         
         opcoes = ["a", "b", "c", "branco"] if rect.width() < LIMIAR_LARGURA else ["a", "b", "c", "d", "e", "f", "branco"]
 
-        altura_media = 58
+        altura_media = 58.5
         num_caixas = int(rect.height() // altura_media)
         if num_caixas == 0:
             return
