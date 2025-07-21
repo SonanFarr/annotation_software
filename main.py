@@ -20,6 +20,11 @@ from PyQt5.QtCore import Qt
 import math
 
 HANDLE = 6
+LIMIAR_LARGURA = 800
+NUM_AREA_FRAC_6 = 0.30
+NUM_AREA_FRAC_3 = 0.502
+CIRCLE_RADIUS = 30
+ALTURA_CENTRO = 0.5 
 
 class AnnotationBox:
     def __init__(self, rect: QRect, classe: str):
@@ -240,33 +245,70 @@ class ImageLabel(QLabel):
         for box in self.mw.annotations:
             if box.selected:
                 # Caixa selecionada: borda verde
-                p.setPen(QPen(Qt.green, 2, Qt.SolidLine))
+                p.setPen(QPen(Qt.green, 5, Qt.SolidLine))
                 p.setBrush(Qt.NoBrush)  # Sem preenchimento
                 p.drawRect(box.rect)
 
-                # Desenha handles (pequenos quadrados verdes)
+                # Desenha handles
                 p.setBrush(Qt.green)
                 for handle_rect in box.handle_rects().values():
                     p.drawRect(handle_rect)
-                p.setBrush(Qt.NoBrush)  # Limpa o brush para não afetar as próximas caixas
+                p.setBrush(Qt.NoBrush)
             else:
                 # Caixa não selecionada: borda azul
-                p.setPen(QPen(Qt.blue, 2))
-                p.setBrush(Qt.NoBrush)  # Garante sem preenchimento
+                p.setPen(QPen(Qt.blue, 5))
+                p.setBrush(Qt.NoBrush)
                 p.drawRect(box.rect)
 
-            # Texto da classe (sempre em vermelho)
-            font = p.font()
-            font.setPointSize(15)
-            font.setBold(False)
-            p.setFont(font)
-            p.setPen(QPen(Qt.yellow, 1))
-            p.drawText(box.rect.topLeft() + QPoint(5, 15), box.classe.upper())
+            # Desenhar círculo amarelo na alternativa marcada
+            classe = box.classe.lower()
+            if classe not in ['a', 'b', 'c', 'd', 'e', 'f', 'branco']:
+                continue 
 
+            num_alternativas = 3 if box.rect.width() < LIMIAR_LARGURA else 6
+            opcoes_validas = ['a', 'b', 'c'] if num_alternativas == 3 else ['a', 'b', 'c', 'd', 'e', 'f']
+            
+            if classe == 'branco' or classe not in opcoes_validas:
+                continue
+
+            idx = opcoes_validas.index(classe)
+
+            total_w = box.rect.width()
+            total_h = box.rect.height()
+            start_x = box.rect.left()
+            start_y = box.rect.top()
+
+            if(num_alternativas == 3):
+                alt_area_x = start_x + int(total_w * NUM_AREA_FRAC_3)
+                alt_area_w = int(total_w * (1 - NUM_AREA_FRAC_3))
+            else:
+                alt_area_x = start_x + int(total_w * NUM_AREA_FRAC_6)
+                alt_area_w = int(total_w * (1 - NUM_AREA_FRAC_6))
+
+            # Largura da alternativa + espaço
+            espacamento = 0.1
+            num_espacos = num_alternativas + 1
+            total_espaco = alt_area_w * espacamento
+            largura_util = alt_area_w - total_espaco
+            largura_alt = largura_util / num_alternativas
+            largura_esp = total_espaco / num_espacos
+
+            # Posição do centro do marcador
+            x_centro = alt_area_x + largura_esp * (idx + 1) + largura_alt * idx + largura_alt / 2
+            y_centro = start_y + total_h * ALTURA_CENTRO
+
+            # Desenha o círculo
+            p.setBrush(Qt.yellow)
+            p.setPen(QPen(Qt.black, 3))
+            p.drawEllipse(
+                QPoint(int(x_centro), int(y_centro)),
+                CIRCLE_RADIUS, CIRCLE_RADIUS
+            )
+            p.setBrush(Qt.NoBrush)
         
         # Caixa que está sendo desenhada
         if self.mw.drawing and self.mw.start_point and self.mw.end_point:
-            p.setPen(QPen(Qt.red, 2, Qt.DashLine))
+            p.setPen(QPen(Qt.red, 6, Qt.DashLine))
             p.drawRect(QRect(self.mw.start_point, self.mw.end_point).normalized())
 
 class MainWindow(QMainWindow):
@@ -445,23 +487,27 @@ class MainWindow(QMainWindow):
             "b": 1,
             "c": 2,
             "d": 3,
-            "e": 4
+            "e": 4,
+            "f": 5,
+            "branco": 6
         }
 
         try:
             with open(txt_path, 'w', encoding='utf-8') as f:
-                for rect, classe in self.annotations:
-                    if classe not in mark_to_class:
-                        continue 
+                for box in self.annotations:
+                    classe = box.classe
+                    rect = box.rect
 
                     cls_id = mark_to_class[classe]
                     # Normalização
-                    x_center = (rect.x() + rect.width() / 2) / img_width
-                    y_center = (rect.y() + rect.height() / 2) / img_height
+                    #x_center = (rect.x() + rect.width() / 2) / img_width
+                    #y_center = (rect.y() + rect.height() / 2) / img_height
+                    x_norm = rect.x() / img_width
+                    y_norm = rect.y() / img_height
                     width = rect.width() / img_width
                     height = rect.height() / img_height
 
-                    f.write(f"{cls_id} {x_center:.17f} {y_center:.17f} {width:.17f} {height:.17f}\n")
+                    f.write(f"{cls_id} {x_norm:.17f} {y_norm:.17f} {width:.17f} {height:.17f}\n")
             print(f"Arquivo TXT salvo em: {txt_path}")
         except Exception as e:
             print(f"Erro ao salvar TXT: {e}")
@@ -477,7 +523,7 @@ class MainWindow(QMainWindow):
         
         for cr in self.column_coordinates:
             data["columns"].append({
-               "x": cr.x(),
+                "x": cr.x(),
                 "y": cr.y(),
                 "width": cr.width(),
                 "height": cr.height()
@@ -529,7 +575,6 @@ class MainWindow(QMainWindow):
 
         self.column_coordinates.append(rect)
         
-        LIMIAR_LARGURA = 200
         opcoes = ["a", "b", "c", "branco"] if rect.width() < LIMIAR_LARGURA else ["a", "b", "c", "d", "e", "f", "branco"]
 
         altura_media = 58
