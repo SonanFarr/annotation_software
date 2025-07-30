@@ -7,6 +7,8 @@ from PyQt5.QtCore import QStringListModel
 from PyQt5 import uic
 import json
 
+from data_augmentation import DataAugmentationWindow
+
 from PyQt5.QtGui import QPainter, QPen
 from PyQt5.QtCore import QPoint
 from PyQt5.QtCore import QRect, QTimer
@@ -356,6 +358,7 @@ class MainWindow(QMainWindow):
         self.next_img_button.clicked.connect(self.next_img)
         self.prev_img_button.clicked.connect(self.prev_img)
         self.save_img_button.clicked.connect(self.save_img)
+        self.new_window_button.clicked.connect(self.open_new_window)
 
         # Espera um tempo para ajustar o tamanho do img_frame corretamente
         QTimer.singleShot(0, self.resize_img_frame)
@@ -363,6 +366,9 @@ class MainWindow(QMainWindow):
         self.setFocusPolicy(Qt.StrongFocus)
         self.setFocus()
 
+    def open_new_window(self):
+        self.augment_window = DataAugmentationWindow(self)
+        self.augment_window.show()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Z:
