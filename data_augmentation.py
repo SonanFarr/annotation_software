@@ -6,6 +6,8 @@ from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen
 import numpy as np
 import json
 
+import os
+
 HANDLE = 6
 LIMIAR_LARGURA = 800
 NUM_AREA_FRAC_6 = 0.30
@@ -19,8 +21,6 @@ class AnnotationBox:
         self.classe = classe
         self.selected = False
 
-import os
-
 class ImageLabel(QLabel):
     def __init__(self, main_window):
         super().__init__(main_window.img_frame)
@@ -28,17 +28,42 @@ class ImageLabel(QLabel):
         self.copy_start = None
         self.copied_region = None
 
-    # —— já existente: mousePressEvent etc. ——
+        self.copy_start = None
+        self.copied_region = None
 
+    def mousePressEvent(self, event):
+        if not self.main_window.pixmap or self.main_window.pixmap.isNull():
+            return
+
+        label_width = self.width()
+        label_height = self.height()
+        img_width = self.main_window.pixmap.width()
+        img_height = self.main_window.pixmap.height()
+
+        x = int(event.pos().x() * img_width / label_width)
+        y = int(event.pos().y() * img_height / label_height)
+
+        #Copiar região da anotação
+        if event.button() == Qt.RightButton:
+            for box in self.main_window.annotations:
+                if box.rect.contains(x, y):
+                    rect = box.rect
+                    x1, y1, w, h = rect.x(), rect.y(), rect.width(), rect.height()
+                    x2 = x1 + w
+                    y2 = y1 + h
+                    self.main_window.copy_region(x1, y1, x2, y2)
+                    return 
+                
+        elif event.button() == Qt.LeftButton and self.main_window.copied_region is not None:
+            self.main_window.paste_region(x, y)
+
+    #Desenha as anotações
     def paintEvent(self, ev):
-        # primeiro desenha a imagem-base
         super().paintEvent(ev)
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
 
-        # desenha cada AnnotationBox carregada
         for box in self.main_window.annotations:
-            # borda azul
             p.setPen(QPen(Qt.blue, 3))
             p.setBrush(Qt.NoBrush)
             p.drawRect(box.rect)
@@ -79,6 +104,7 @@ class DataAugmentationWindow(QMainWindow):
         self.prev_img_button.clicked.connect(self.prev_img)
 
         QTimer.singleShot(0, self.resize_img_frame)
+        
 
     def wheelEvent(self, event):
         if event.angleDelta().y() > 0:
@@ -140,7 +166,6 @@ class DataAugmentationWindow(QMainWindow):
                 rect = QRect(b["x"], b["y"], b["width"], b["height"])
                 self.annotations.append(AnnotationBox(rect, classe))
 
-        # força redesenho do label
         self.img_label.update()       
         
     def copy_region(self, x1, y1, x2, y2):
