@@ -1,9 +1,23 @@
 # data_augmentation_window.py
 from PyQt5.QtWidgets import QMainWindow, QFileDialog, QLabel, QVBoxLayout, QGraphicsView, QGraphicsScene
-from PyQt5.QtCore import QStringListModel, QTimer, Qt
+from PyQt5.QtCore import QStringListModel, QTimer, Qt, QRect
 from PyQt5 import uic
-from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen
 import numpy as np
+import json
+
+HANDLE = 6
+LIMIAR_LARGURA = 800
+NUM_AREA_FRAC_6 = 0.30
+NUM_AREA_FRAC_3 = 0.502
+CIRCLE_RADIUS = 30
+ALTURA_CENTRO = 0.5
+
+class AnnotationBox:
+    def __init__(self, rect: QRect, classe: str):
+        self.rect = rect
+        self.classe = classe
+        self.selected = False
 
 import os
 
@@ -13,40 +27,21 @@ class ImageLabel(QLabel):
         self.main_window = main_window
         self.copy_start = None
         self.copied_region = None
-            
-    def mousePressEvent(self, event):
-        if not self.main_window.pixmap or self.main_window.pixmap.isNull():
-            return
 
-        x = event.pos().x()
-        y = event.pos().y()
+    # —— já existente: mousePressEvent etc. ——
 
-        label_width = self.width()
-        label_height = self.height()
-        img_width = self.main_window.pixmap.width()
-        img_height = self.main_window.pixmap.height()
+    def paintEvent(self, ev):
+        # primeiro desenha a imagem-base
+        super().paintEvent(ev)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
 
-        img_x = int(x * img_width / label_width)
-        img_y = int(y * img_height / label_height)
-
-        if event.button() == Qt.RightButton:
-            square_size = 100
-
-            x1 = max(0, img_x)
-            y1 = max(0, img_y)
-            x2 = min(img_width, x1 + square_size)
-            y2 = min(img_height, y1 + square_size)
-
-            # Converte o QPixmap para array
-            qimage = self.main_window.pixmap.toImage().convertToFormat(QImage.Format_RGBA8888)
-            ptr = qimage.bits()
-            ptr.setsize(qimage.byteCount())
-            arr = np.array(ptr).reshape((img_height, img_width, 4))
-
-            self.main_window.copied_region = arr[y1:y2, x1:x2].copy()
-
-        elif event.button() == Qt.LeftButton and self.main_window.copied_region is not None:
-            self.main_window.paste_region(img_x, img_y)
+        # desenha cada AnnotationBox carregada
+        for box in self.main_window.annotations:
+            # borda azul
+            p.setPen(QPen(Qt.blue, 3))
+            p.setBrush(Qt.NoBrush)
+            p.drawRect(box.rect)
 
 class DataAugmentationWindow(QMainWindow):
     def __init__(self, parent=None):
@@ -60,7 +55,7 @@ class DataAugmentationWindow(QMainWindow):
 
         self.img_label = ImageLabel(self)
         self.img_label.setParent(self.img_frame)
-
+        self.annotations = []
         self.img_label.setGeometry(0, 0, self.img_frame.width(), self.img_frame.height())
 
         self.img_label.setParent(None)
@@ -132,7 +127,21 @@ class DataAugmentationWindow(QMainWindow):
         pixmap = QPixmap(caminho)
         self.pixmap = QPixmap(caminho)
         self.img_label.resize(self.pixmap.size())
-        self.img_label.setPixmap(self.pixmap)        
+        self.img_label.setPixmap(self.pixmap) 
+
+        self.annotations.clear()
+        json_path = os.path.splitext(caminho)[0] + '.json'
+        if os.path.exists(json_path):
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            for q in data.get("questions", []):
+                b = q["question_box"]
+                classe = q.get("mark", "").lower()
+                rect = QRect(b["x"], b["y"], b["width"], b["height"])
+                self.annotations.append(AnnotationBox(rect, classe))
+
+        # força redesenho do label
+        self.img_label.update()       
         
     def copy_region(self, x1, y1, x2, y2):
         qimage = self.pixmap.toImage().convertToFormat(QImage.Format_RGBA8888)
