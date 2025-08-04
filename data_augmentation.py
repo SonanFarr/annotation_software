@@ -1,11 +1,11 @@
 # data_augmentation_window.py
-from PyQt5.QtWidgets import QMainWindow, QFileDialog, QLabel, QVBoxLayout, QGraphicsView, QGraphicsScene
+from PyQt5.QtWidgets import QMainWindow, QFileDialog, QLabel, QVBoxLayout, QGraphicsView, QGraphicsScene, QDialog, QComboBox, QPushButton
 from PyQt5.QtCore import QStringListModel, QTimer, Qt, QRect
 from PyQt5 import uic
 from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen
 import numpy as np
 import json
-
+import cv2
 import os
 
 HANDLE = 6
@@ -14,6 +14,31 @@ NUM_AREA_FRAC_6 = 0.30
 NUM_AREA_FRAC_3 = 0.502
 CIRCLE_RADIUS = 30
 ALTURA_CENTRO = 0.5
+
+class SelectNewClass(QDialog):
+    def __init__(self, classes, current_class=None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Selecione a classe")
+        self.selected_class = None
+
+        layout = QVBoxLayout(self)
+
+        label = QLabel("Escolha a classe para a anotação:")
+        layout.addWidget(label)
+
+        self.combo = QComboBox()
+        self.combo.addItems(classes)
+        if current_class and current_class in classes:
+            self.combo.setCurrentText(current_class)
+        layout.addWidget(self.combo)
+
+        btn_ok = QPushButton("OK")
+        btn_ok.clicked.connect(self.accept)
+        layout.addWidget(btn_ok)
+
+    def accept(self):
+        self.selected_class = self.combo.currentText()
+        super().accept()
 
 class AnnotationBox:
     def __init__(self, rect: QRect, classe: str):
@@ -53,9 +78,29 @@ class ImageLabel(QLabel):
                     y2 = y1 + h
                     self.main_window.copy_region(x1, y1, x2, y2)
                     return 
-                
-        elif event.button() == Qt.LeftButton and self.main_window.copied_region is not None:
-            self.main_window.paste_region(x, y)
+        elif event.button() == Qt.LeftButton: 
+                #Seleciona uma região que deseja editar
+                for box in self.main_window.annotations:
+                    if box.rect.contains(x, y):
+                        #Seleciona todas as classes da imagem atual e cria uma janela de seleção
+                        classes = list(set(b.classe for b in self.main_window.annotations if b.classe))
+                        dlg = SelectNewClass(classes, current_class=box.classe, parent=self.main_window)
+                        if dlg.exec_() == QDialog.Accepted and dlg.selected_class:
+                            nova_classe = dlg.selected_class
+                            box.classe = nova_classe
+                            self.main_window.img_label.update()
+
+                            # Copia e cola a região da primeira anotação com essa classe
+                            for other_box in self.main_window.annotations:
+                                if other_box.classe == nova_classe and other_box != box:
+                                    x1, y1 = other_box.rect.x(), other_box.rect.y()
+                                    w, h = other_box.rect.width(), other_box.rect.height()
+                                    x2, y2 = x1 + w, y1 + h
+                                    self.main_window.copy_region(x1, y1, x2, y2)
+                                    rect = box.rect
+                                    self.main_window.paste_region(rect.x(), rect.y(), rect.width(), rect.height())
+                                    break
+                        return
 
     #Desenha as anotações
     def paintEvent(self, ev):
@@ -93,7 +138,6 @@ class DataAugmentationWindow(QMainWindow):
         self.proxy = self.scene.addWidget(self.img_label)
         self.view.fitInView(self.proxy, Qt.KeepAspectRatio)
         self.img_frame.setGeometry(self.imgFrame.rect())
-
 
         self.img_list_model = QStringListModel()
         self.img_list.setModel(self.img_list_model)
@@ -181,32 +225,30 @@ class DataAugmentationWindow(QMainWindow):
         if x2 > x1 and y2 > y1:
             self.copied_region = arr[y1:y2, x1:x2].copy()
 
-    def paste_region(self, x, y):
-        if not hasattr(self.copied_region, 'shape'):
-            print("Região copiada não é um array.")
-            return
-
+    def paste_region(self, x, y, width, height):
         region = self.copied_region
-        h, w, _ = region.shape
+
+        #Cola a região em toda a região da anotação
+        resized_region = cv2.resize(region, (width, height), interpolation=cv2.INTER_LINEAR)
 
         qimage = self.pixmap.toImage().convertToFormat(QImage.Format_RGBA8888)
-        width, height = qimage.width(), qimage.height()
+        img_width, img_height = qimage.width(), qimage.height()
         ptr = qimage.bits()
         ptr.setsize(qimage.byteCount())
-        arr = np.array(ptr).reshape((height, width, 4))
+        arr = np.array(ptr).reshape((img_height, img_width, 4))
 
         x1 = max(0, x)
         y1 = max(0, y)
-        x2 = min(width, x + w)
-        y2 = min(height, y + h)
+        x2 = min(img_width, x + width)
+        y2 = min(img_height, y + height)
 
         region_w = x2 - x1
         region_h = y2 - y1
 
         if region_w > 0 and region_h > 0:
-            arr[y1:y2, x1:x2] = region[0:region_h, 0:region_w]
+            arr[y1:y2, x1:x2] = resized_region[0:region_h, 0:region_w]
 
-        new_qimage = QImage(arr.data, width, height, QImage.Format_RGBA8888)
+        new_qimage = QImage(arr.data, img_width, img_height, QImage.Format_RGBA8888)
         self.pixmap = QPixmap.fromImage(new_qimage)
         self.img_label.setPixmap(self.pixmap)
         self.img_label.resize(self.pixmap.size())
