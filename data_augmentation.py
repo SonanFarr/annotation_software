@@ -108,7 +108,7 @@ class ImageLabel(QLabel):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
 
-        for box in self.main_window.annotations:
+        for box in self.main_window.column_coordinates:
             p.setPen(QPen(Qt.blue, 3))
             p.setBrush(Qt.NoBrush)
             p.drawRect(box.rect)
@@ -126,6 +126,7 @@ class DataAugmentationWindow(QMainWindow):
         self.img_label = ImageLabel(self)
         self.img_label.setParent(self.img_frame)
         self.annotations = []
+        self.column_coordinates = []
         self.img_label.setGeometry(0, 0, self.img_frame.width(), self.img_frame.height())
 
         self.img_label.setParent(None)
@@ -200,15 +201,22 @@ class DataAugmentationWindow(QMainWindow):
         self.img_label.setPixmap(self.pixmap) 
 
         self.annotations.clear()
+        self.column_coordinates.clear()
+        
         json_path = os.path.splitext(caminho)[0] + '.json'
         if os.path.exists(json_path):
             with open(json_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
+            
             for q in data.get("questions", []):
                 b = q["question_box"]
                 classe = q.get("mark", "").lower()
                 rect = QRect(b["x"], b["y"], b["width"], b["height"])
                 self.annotations.append(AnnotationBox(rect, classe))
+            
+            for col in data.get("columns", []):
+                    rect = QRect(col["x"], col["y"], col["width"], col["height"])
+                    self.column_coordinates.append(AnnotationBox(rect, "x"))
 
         self.img_label.update()       
         
