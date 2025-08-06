@@ -1,5 +1,5 @@
 # data_augmentation_window.py
-from PyQt5.QtWidgets import QMainWindow, QFileDialog, QLabel, QVBoxLayout, QGraphicsView, QGraphicsScene, QDialog, QComboBox, QPushButton
+from PyQt5.QtWidgets import QMainWindow, QFileDialog, QLabel, QVBoxLayout, QGraphicsView, QGraphicsScene, QDialog, QComboBox, QPushButton, QRadioButton, QButtonGroup
 from PyQt5.QtCore import QStringListModel, QTimer, Qt, QRect
 from PyQt5 import uic
 from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen
@@ -38,6 +38,52 @@ class SelectNewClass(QDialog):
 
     def accept(self):
         self.selected_class = self.combo.currentText()
+        super().accept()
+
+class ImageOptionsDialog(QDialog):
+    def __init__(self, classes, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Opções de Imagem")
+        self.setModal(True)
+
+        self.can_edit = False
+        self.old_class = None
+        self.new_class = None
+
+        layout = QVBoxLayout()
+
+        layout.addWidget(QLabel("A imagem pode ser sintetizada?"))
+        self.radio_yes = QRadioButton("Sim")
+        self.radio_no = QRadioButton("Não")
+        self.radio_yes.setChecked(True)  # Sim é o padrão
+
+        self.radio_group = QButtonGroup(self)
+        self.radio_group.addButton(self.radio_yes)
+        self.radio_group.addButton(self.radio_no)
+
+        layout.addWidget(self.radio_yes)
+        layout.addWidget(self.radio_no)
+
+        layout.addWidget(QLabel("Classe original:"))
+        self.combo_old = QComboBox()
+        self.combo_old.addItems(classes)
+        layout.addWidget(self.combo_old)
+
+        layout.addWidget(QLabel("Classe nova:"))
+        self.combo_new = QComboBox()
+        self.combo_new.addItems(classes)
+        layout.addWidget(self.combo_new)
+
+        btn_ok = QPushButton("OK")
+        btn_ok.clicked.connect(self.accept)
+        layout.addWidget(btn_ok)
+
+        self.setLayout(layout)
+
+    def accept(self):
+        self.can_edit = self.radio_yes.isChecked()
+        self.old_class = self.combo_old.currentText()
+        self.new_class = self.combo_new.currentText()
         super().accept()
 
 class AnnotationBox:
@@ -219,6 +265,16 @@ class DataAugmentationWindow(QMainWindow):
                     self.column_coordinates.append(AnnotationBox(rect, "x"))
 
         self.img_label.update()       
+
+        #Chama as opções de sintetização caso a imagem tenha anotações
+        classes = list(set(b.classe for b in self.annotations if b.classe))
+        if classes:
+            dialog = ImageOptionsDialog(classes, parent=self)
+            if dialog.exec_() == QDialog.Accepted and dialog.can_edit:
+                for box in self.annotations:
+                    if box.classe == dialog.old_class:
+                        box.classe = dialog.new_class
+                        self.img_label.update()
         
     def copy_region(self, x1, y1, x2, y2):
         qimage = self.pixmap.toImage().convertToFormat(QImage.Format_RGBA8888)
