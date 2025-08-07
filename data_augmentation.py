@@ -268,9 +268,11 @@ class DataAugmentationWindow(QMainWindow):
             # Novo nome da imagem e JSON
             sintetic_image_name = os.path.basename(os.path.splitext(caminho)[0]) + "_sintetic.jpg"
             sintetic_json_name = os.path.basename(os.path.splitext(caminho)[0]) + "_sintetic.json"
+            sintetic_txt_name = os.path.basename(os.path.splitext(caminho)[0]) + "_sintetic.txt"
 
             sintetic_image_path = os.path.join(os.path.dirname(os.path.splitext(caminho)[0]), sintetic_image_name)
             sintetic_json_path = os.path.join(os.path.dirname(json_path), sintetic_json_name)
+            sintetic_txt_path = os.path.join(os.path.dirname(json_path), sintetic_txt_name)
 
             # Salva nova imagem
             imagem_sintetizada.save(sintetic_image_path, "JPG")
@@ -282,7 +284,36 @@ class DataAugmentationWindow(QMainWindow):
             with open(sintetic_json_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4, ensure_ascii=False)
 
-            QMessageBox.information(self, "Sucesso", f"Imagem e JSON sintetizados salvos:\n{sintetic_image_name}\n{sintetic_json_name}")
+            #Gera novo txt
+            img_width = self.pixmap.width()
+            img_height = self.pixmap.height()
+
+            # Classe para ID
+            mark_to_class = {
+                "a": 0,
+                "b": 1,
+                "c": 2,
+                "d": 3,
+                "e": 4,
+                "f": 5,
+                "branco": 6
+            }
+
+            with open(sintetic_txt_path, 'w', encoding='utf-8') as f:
+                for q in self.questions:
+                    classe = q["mark"] 
+                    cls_id = mark_to_class[classe]
+
+                    box = q["question_box"]
+
+                    x = box["x"] / img_width
+                    y = box["y"] / img_height
+                    width = box["width"] / img_width
+                    height = box["height"] / img_height
+                     
+                    f.write(f"{cls_id} {x:.17f} {y:.17f} {width:.17f} {height:.17f}\n")
+
+            QMessageBox.information(self, "Sucesso", f"Imagem, TXT e JSON sintetizados salvos:\n{sintetic_image_name}\n{sintetic_json_name}\n{sintetic_txt_name}")
 
             self.show_img()  # Recarrega a imagem para refletir alterações visuais
     
