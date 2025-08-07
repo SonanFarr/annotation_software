@@ -1,5 +1,5 @@
 # data_augmentation_window.py
-from PyQt5.QtWidgets import QMainWindow, QFileDialog, QLabel, QVBoxLayout, QGraphicsView, QGraphicsScene, QDialog, QComboBox, QPushButton, QRadioButton, QButtonGroup
+from PyQt5.QtWidgets import QMainWindow, QFileDialog, QLabel, QVBoxLayout, QGraphicsView, QGraphicsScene, QDialog, QComboBox, QPushButton, QInputDialog, QMessageBox
 from PyQt5.QtCore import QStringListModel, QTimer, Qt, QRect
 from PyQt5 import uic
 from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen
@@ -14,6 +14,100 @@ NUM_AREA_FRAC_6 = 0.30
 NUM_AREA_FRAC_3 = 0.502
 CIRCLE_RADIUS = 30
 ALTURA_CENTRO = 0.5
+
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton, QMessageBox
+
+'''
+class SubcolunaSwapDialog(QDialog):
+    def __init__(self, subcolunas_labels, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Selecionar Subcolunas para Troca")
+
+        self.combo1 = QComboBox()
+        self.combo1.addItems(subcolunas_labels)
+
+        self.combo2 = QComboBox()
+        self.combo2.addItems(subcolunas_labels)
+
+        layout = QVBoxLayout()
+        row1 = QHBoxLayout()
+        row2 = QHBoxLayout()
+
+        row1.addWidget(QLabel("Primeira subcoluna:"))
+        row1.addWidget(self.combo1)
+
+        row2.addWidget(QLabel("Segunda subcoluna:"))
+        row2.addWidget(self.combo2)
+
+        layout.addLayout(row1)
+        layout.addLayout(row2)
+
+        btn_ok = QPushButton("Trocar")
+        btn_ok.clicked.connect(self.accept_if_valid)
+
+        layout.addWidget(btn_ok)
+        self.setLayout(layout)
+
+    def accept_if_valid(self):
+        if self.combo1.currentIndex() == self.combo2.currentIndex():
+            QMessageBox.warning(self, "Erro", "Selecione duas subcolunas diferentes.")
+            return
+        self.accept()
+
+    def get_indices(self):
+        return self.combo1.currentIndex(), self.combo2.currentIndex()
+'''
+
+class SubcolunaSwapDialog(QDialog):
+    def __init__(self, subcolunas_labels, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Selecionar Subcolunas para Troca")
+
+        self.combo1 = QComboBox()
+        self.combo1.addItems(subcolunas_labels)
+
+        self.combo2 = QComboBox()
+        self.combo2.addItems(subcolunas_labels)
+
+        self.class_selector = QComboBox()
+        self.class_selector.addItems(["a", "b", "c", "d", "e", "f", "branco"])
+
+        layout = QVBoxLayout()
+        row1 = QHBoxLayout()
+        row1.addWidget(QLabel("Primeira subcoluna:"))
+        row1.addWidget(self.combo1)
+
+        row2 = QHBoxLayout()
+        row2.addWidget(QLabel("Segunda subcoluna:"))
+        row2.addWidget(self.combo2)
+
+        row3 = QHBoxLayout()
+        row3.addWidget(QLabel("Nova classe das questões:"))
+        row3.addWidget(self.class_selector)
+
+        layout.addLayout(row1)
+        layout.addLayout(row2)
+        layout.addLayout(row3)
+
+        btn_ok = QPushButton("Trocar")
+        btn_ok.clicked.connect(self.accept_if_valid)
+
+        layout.addWidget(btn_ok)
+        self.setLayout(layout)
+
+    def accept_if_valid(self):
+        if self.combo1.currentIndex() == self.combo2.currentIndex():
+            QMessageBox.warning(self, "Erro", "Selecione duas subcolunas diferentes.")
+            return
+        self.accept()
+
+    def get_selection(self):
+        return (
+            self.combo1.currentIndex(),
+            self.combo2.currentIndex(),
+            self.class_selector.currentText()
+        )
+
 
 class SelectNewClass(QDialog):
     def __init__(self, classes, current_class=None, parent=None):
@@ -38,52 +132,6 @@ class SelectNewClass(QDialog):
 
     def accept(self):
         self.selected_class = self.combo.currentText()
-        super().accept()
-
-class ImageOptionsDialog(QDialog):
-    def __init__(self, classes, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Opções de Imagem")
-        self.setModal(True)
-
-        self.can_edit = False
-        self.old_class = None
-        self.new_class = None
-
-        layout = QVBoxLayout()
-
-        layout.addWidget(QLabel("A imagem pode ser sintetizada?"))
-        self.radio_yes = QRadioButton("Sim")
-        self.radio_no = QRadioButton("Não")
-        self.radio_yes.setChecked(True)  # Sim é o padrão
-
-        self.radio_group = QButtonGroup(self)
-        self.radio_group.addButton(self.radio_yes)
-        self.radio_group.addButton(self.radio_no)
-
-        layout.addWidget(self.radio_yes)
-        layout.addWidget(self.radio_no)
-
-        layout.addWidget(QLabel("Classe original:"))
-        self.combo_old = QComboBox()
-        self.combo_old.addItems(classes)
-        layout.addWidget(self.combo_old)
-
-        layout.addWidget(QLabel("Classe nova:"))
-        self.combo_new = QComboBox()
-        self.combo_new.addItems(classes)
-        layout.addWidget(self.combo_new)
-
-        btn_ok = QPushButton("OK")
-        btn_ok.clicked.connect(self.accept)
-        layout.addWidget(btn_ok)
-
-        self.setLayout(layout)
-
-    def accept(self):
-        self.can_edit = self.radio_yes.isChecked()
-        self.old_class = self.combo_old.currentText()
-        self.new_class = self.combo_new.currentText()
         super().accept()
 
 class AnnotationBox:
@@ -158,6 +206,12 @@ class ImageLabel(QLabel):
             p.setPen(QPen(Qt.blue, 3))
             p.setBrush(Qt.NoBrush)
             p.drawRect(box.rect)
+            
+        if hasattr(self.parent(), "subcolunas"):
+            for sub_rect, _, _ in self.parent().subcolunas:
+                p.setPen(QPen(Qt.darkYellow, 1, Qt.DotLine))
+                p.drawRect(sub_rect)
+
 
 class DataAugmentationWindow(QMainWindow):
     def __init__(self, parent=None):
@@ -173,6 +227,7 @@ class DataAugmentationWindow(QMainWindow):
         self.img_label.setParent(self.img_frame)
         self.annotations = []
         self.column_coordinates = []
+        self.subcolunas = []
         self.img_label.setGeometry(0, 0, self.img_frame.width(), self.img_frame.height())
 
         self.img_label.setParent(None)
@@ -193,10 +248,115 @@ class DataAugmentationWindow(QMainWindow):
         self.open_dir_button.clicked.connect(self.open_dir)
         self.next_img_button.clicked.connect(self.next_img)
         self.prev_img_button.clicked.connect(self.prev_img)
+        self.btn_trocar_subcolunas.clicked.connect(self.abrir_dialogo_troca_subcolunas)
 
         QTimer.singleShot(0, self.resize_img_frame)
-        
 
+    '''
+    def abrir_dialogo_troca_subcolunas(self):
+        if not self.pixmap:
+            QMessageBox.warning(self, "Erro", "Nenhuma imagem carregada.")
+            return
+
+        if not self.column_coordinates:
+            QMessageBox.warning(self, "Erro", "Nenhuma coluna detectada.")
+            return
+
+        # Extrair subcolunas
+        self.subcolunas.clear()
+        for col_index, coluna in enumerate(self.column_coordinates):
+            sub_rets = self.extrair_subcolunas_de_coluna(coluna)
+            for sub_index, sub_rect in enumerate(sub_rets):
+                self.subcolunas.append((sub_rect, col_index, sub_index))
+
+        if len(self.subcolunas) < 2:
+            QMessageBox.information(self, "Informação", "Menos de duas subcolunas disponíveis.")
+            return
+
+        sub_labels = [f"Coluna {col} - Alternativa {sub+1}" for (_, col, sub) in self.subcolunas]
+        dialog = SubcolunaSwapDialog(sub_labels, self)
+
+        if dialog.exec_():
+            idx1, idx2 = dialog.get_indices()
+            self.trocar_subcolunas_na_imagem(idx1, idx2)
+            QMessageBox.information(self, "Sucesso", "Subcolunas trocadas com sucesso.")
+    '''
+    
+    def abrir_dialogo_troca_subcolunas(self):
+        image_filename = self.image_files[self.current_index]
+        caminho = os.path.join(self.current_dir, image_filename)
+        
+        if not self.pixmap:
+            QMessageBox.warning(self, "Erro", "Nenhuma imagem carregada.")
+            return
+
+        if not self.column_coordinates:
+            QMessageBox.warning(self, "Erro", "Nenhuma coluna detectada.")
+            return
+
+        # Lê o arquivo JSON associado à imagem
+        json_path = os.path.splitext(caminho)[0] + '.json'
+        if not os.path.exists(json_path):
+            QMessageBox.warning(self, "Erro", f"Arquivo JSON não encontrado: {json_path}")
+            return
+
+        with open(json_path, "r", encoding="utf-8") as f:
+            try:
+                data = json.load(f)
+            except Exception as e:
+                QMessageBox.warning(self, "Erro", f"Falha ao carregar JSON: {e}")
+                return
+
+        self.questions = data.get("questions", [])
+
+        # Monta os nomes das subcolunas disponíveis (ignorando a de número, se necessário)
+        sub_labels = [f"Subcoluna {i}" for i in range(len(self.subcolunas))]
+
+        # Abre o diálogo personalizado
+        dialog = SubcolunaSwapDialog(sub_labels, self)
+        if dialog.exec_():
+            idx1, idx2, nova_classe = dialog.get_selection()
+
+            # Troca visual das subcolunas na imagem
+            imagem_sintetizada = self.trocar_subcolunas_na_imagem(idx1, idx2, self.pixmap)
+            
+            # Converte para QPixmap para exibição
+            pixmap_sintetizado = QPixmap.fromImage(imagem_sintetizada)
+
+            # Atualiza o QLabel ou widget de imagem com a nova imagem
+            self.img_label.setPixmap(pixmap_sintetizado)
+
+            # Determina quais colunas foram afetadas (com base no índice de subcolunas)
+            col1 = self.subcolunas[idx1][1]
+            col2 = self.subcolunas[idx2][1]
+            colunas_afetadas = set([col1, col2])
+
+            # Atualiza a classe ("mark") das questões nas colunas afetadas
+            for q in self.questions:
+                if q.get("column_index") in colunas_afetadas:
+                    q["mark"] = nova_classe
+
+            # Novo nome da imagem e JSON
+            sintetic_image_name = os.path.basename(os.path.splitext(caminho)[0]) + "_sintetic.jpg"
+            sintetic_json_name = os.path.basename(os.path.splitext(caminho)[0]) + "_sintetic.json"
+
+            sintetic_image_path = os.path.join(os.path.dirname(os.path.splitext(caminho)[0]), sintetic_image_name)
+            sintetic_json_path = os.path.join(os.path.dirname(json_path), sintetic_json_name)
+
+            # Salva nova imagem
+            imagem_sintetizada.save(sintetic_image_path, "JPG")
+
+            # Atualiza o nome da imagem no JSON e salva o novo arquivo
+            data["image"] = sintetic_image_name
+            data["questions"] = self.questions
+
+            with open(sintetic_json_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4, ensure_ascii=False)
+
+            QMessageBox.information(self, "Sucesso", f"Imagem e JSON sintetizados salvos:\n{sintetic_image_name}\n{sintetic_json_name}")
+
+            self.show_img()  # Recarrega a imagem para refletir alterações visuais
+    
     def wheelEvent(self, event):
         if event.angleDelta().y() > 0:
             self.view.scale(1.1, 1.1)
@@ -261,21 +421,93 @@ class DataAugmentationWindow(QMainWindow):
                 self.annotations.append(AnnotationBox(rect, classe))
             
             for col in data.get("columns", []):
-                    rect = QRect(col["x"], col["y"], col["width"], col["height"])
-                    self.column_coordinates.append(AnnotationBox(rect, "x"))
+                rect = QRect(col["x"], col["y"], col["width"], col["height"])
+                self.column_coordinates.append(AnnotationBox(rect, "x"))
 
-        self.img_label.update()       
+            # Extrair subcolunas de alternativas (ignorando área dos números)
+            self.subcolunas.clear()
+            for col_index, coluna in enumerate(self.column_coordinates):
+                sub_rets = self.extrair_subcolunas_de_coluna(coluna)
+                for sub_index, sub_rect in enumerate(sub_rets):
+                    self.subcolunas.append((sub_rect, col_index, sub_index))  # sub_index de 0 a 5
+                
+            self.img_label.update()       
+                
+    def extrair_subcolunas_de_coluna(self, coluna: AnnotationBox, num_subcolunas=6, frac_num_area=0.3):
+        subcolunas = []
+        rect = coluna.rect
 
-        #Chama as opções de sintetização caso a imagem tenha anotações
-        classes = list(set(b.classe for b in self.annotations if b.classe))
-        if classes:
-            dialog = ImageOptionsDialog(classes, parent=self)
-            if dialog.exec_() == QDialog.Accepted and dialog.can_edit:
-                for box in self.annotations:
-                    if box.classe == dialog.old_class:
-                        box.classe = dialog.new_class
-                        self.img_label.update()
+        largura_total = rect.width()
+        altura_total = rect.height()
+
+        largura_num_area = int(largura_total * frac_num_area)
+        largura_alt_area = largura_total - largura_num_area
+
+        largura_uma_alt = largura_alt_area // num_subcolunas
+
+        for i in range(num_subcolunas):
+            left = rect.left() + largura_num_area + i * largura_uma_alt
+            sub_rect = QRect(left, rect.top(), largura_uma_alt, altura_total)
+            subcolunas.append(sub_rect)
         
+        return subcolunas
+    
+    '''
+    def trocar_subcolunas_na_imagem(self, idx1, idx2):
+        if not self.pixmap:
+            return
+
+        # Cria uma cópia da imagem original
+        image = self.pixmap.toImage()
+        painter = QPainter()
+        swapped = QImage(image)
+
+        rect1, _, _ = self.subcolunas[idx1]
+        rect2, _, _ = self.subcolunas[idx2]
+
+        crop1 = image.copy(rect1)
+        crop2 = image.copy(rect2)
+
+        painter.begin(swapped)
+        painter.drawImage(rect1, crop2)
+        painter.drawImage(rect2, crop1)
+        painter.end()
+
+        self.pixmap = QPixmap.fromImage(swapped)
+        self.img_label.setPixmap(self.pixmap)
+        self.img_label.update()
+
+        return image
+    '''
+
+    def trocar_subcolunas_na_imagem(self, idx1, idx2, imagem=None):
+        if imagem is None:
+            imagem = self.image
+
+        # Converte QPixmap -> QImage (para edição)
+        image_qt = imagem.toImage().convertToFormat(QImage.Format_RGB32)
+
+        # Cria pintor na QImage
+        painter = QPainter(image_qt)
+
+        # Define os retângulos das subcolunas
+        col1_rect, _, _ = self.subcolunas[idx1]
+        col2_rect, _, _ = self.subcolunas[idx2]
+
+        # Copia os pedaços da imagem original (como QPixmap)
+        col1_img = imagem.copy(col1_rect)
+        col2_img = imagem.copy(col2_rect)
+
+        # Desenha as subcolunas trocadas
+        painter.drawPixmap(col1_rect.topLeft(), col2_img)
+        painter.drawPixmap(col2_rect.topLeft(), col1_img)
+        painter.end()
+
+        # Retorna imagem modificada como QImage
+        return image_qt
+
+
+    
     def copy_region(self, x1, y1, x2, y2):
         qimage = self.pixmap.toImage().convertToFormat(QImage.Format_RGBA8888)
         width, height = qimage.width(), qimage.height()

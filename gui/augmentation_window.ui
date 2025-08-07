@@ -108,9 +108,9 @@
            </widget>
           </item>
           <item row="6" column="0">
-           <widget class="QPushButton" name="new_window_button">
+           <widget class="QPushButton" name="btn_trocar_subcolunas">
             <property name="text">
-             <string>Nova Janela</string>
+             <string>Trocar Subcolunas</string>
             </property>
            </widget>
           </item>

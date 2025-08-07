@@ -29,9 +29,10 @@ CIRCLE_RADIUS = 30
 ALTURA_CENTRO = 0.5 
 
 class AnnotationBox:
-    def __init__(self, rect: QRect, classe: str):
+    def __init__(self, rect: QRect, classe: str, col_index: int = -1):
         self.rect = rect 
         self.classe = classe 
+        self.col_index = col_index
         self.selected = False
 
     def contains(self, point: QPoint):
@@ -505,9 +506,6 @@ class MainWindow(QMainWindow):
                     rect = box.rect
 
                     cls_id = mark_to_class[classe]
-                    # Normalização
-                    #x_center = (rect.x() + rect.width() / 2) / img_width
-                    #y_center = (rect.y() + rect.height() / 2) / img_height
                     x_norm = rect.x() / img_width
                     y_norm = rect.y() / img_height
                     width = rect.width() / img_width
@@ -539,6 +537,7 @@ class MainWindow(QMainWindow):
             question_data = {
                 "number": i,
                 "mark": box.classe,
+                "column_index": box.col_index,
                 "question_box": {
                     "x": box.rect.x(),
                     "y": box.rect.y(),
@@ -580,6 +579,7 @@ class MainWindow(QMainWindow):
             return
 
         self.column_coordinates.append(rect)
+        col_index = len(self.column_coordinates) - 1
         
         opcoes = ["a", "b", "c", "branco"] if rect.width() < LIMIAR_LARGURA else ["a", "b", "c", "d", "e", "f", "branco"]
 
@@ -623,9 +623,10 @@ class MainWindow(QMainWindow):
                 for ann in self.annotations:
                     if ann.rect == rect:
                         ann.classe = val
+                        ann.col_index = col_index  # Atualiza coluna
                         break
                 else:
-                    self.annotations.append(AnnotationBox(rect, val))
+                    self.annotations.append(AnnotationBox(rect, val, col_index))
 
                 self.update_annotations_list()
                 self.img_label.update()
