@@ -17,47 +17,6 @@ ALTURA_CENTRO = 0.5
 
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton, QMessageBox
 
-'''
-class SubcolunaSwapDialog(QDialog):
-    def __init__(self, subcolunas_labels, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Selecionar Subcolunas para Troca")
-
-        self.combo1 = QComboBox()
-        self.combo1.addItems(subcolunas_labels)
-
-        self.combo2 = QComboBox()
-        self.combo2.addItems(subcolunas_labels)
-
-        layout = QVBoxLayout()
-        row1 = QHBoxLayout()
-        row2 = QHBoxLayout()
-
-        row1.addWidget(QLabel("Primeira subcoluna:"))
-        row1.addWidget(self.combo1)
-
-        row2.addWidget(QLabel("Segunda subcoluna:"))
-        row2.addWidget(self.combo2)
-
-        layout.addLayout(row1)
-        layout.addLayout(row2)
-
-        btn_ok = QPushButton("Trocar")
-        btn_ok.clicked.connect(self.accept_if_valid)
-
-        layout.addWidget(btn_ok)
-        self.setLayout(layout)
-
-    def accept_if_valid(self):
-        if self.combo1.currentIndex() == self.combo2.currentIndex():
-            QMessageBox.warning(self, "Erro", "Selecione duas subcolunas diferentes.")
-            return
-        self.accept()
-
-    def get_indices(self):
-        return self.combo1.currentIndex(), self.combo2.currentIndex()
-'''
-
 class SubcolunaSwapDialog(QDialog):
     def __init__(self, subcolunas_labels, parent=None):
         super().__init__(parent)
@@ -251,36 +210,6 @@ class DataAugmentationWindow(QMainWindow):
         self.btn_trocar_subcolunas.clicked.connect(self.abrir_dialogo_troca_subcolunas)
 
         QTimer.singleShot(0, self.resize_img_frame)
-
-    '''
-    def abrir_dialogo_troca_subcolunas(self):
-        if not self.pixmap:
-            QMessageBox.warning(self, "Erro", "Nenhuma imagem carregada.")
-            return
-
-        if not self.column_coordinates:
-            QMessageBox.warning(self, "Erro", "Nenhuma coluna detectada.")
-            return
-
-        # Extrair subcolunas
-        self.subcolunas.clear()
-        for col_index, coluna in enumerate(self.column_coordinates):
-            sub_rets = self.extrair_subcolunas_de_coluna(coluna)
-            for sub_index, sub_rect in enumerate(sub_rets):
-                self.subcolunas.append((sub_rect, col_index, sub_index))
-
-        if len(self.subcolunas) < 2:
-            QMessageBox.information(self, "Informação", "Menos de duas subcolunas disponíveis.")
-            return
-
-        sub_labels = [f"Coluna {col} - Alternativa {sub+1}" for (_, col, sub) in self.subcolunas]
-        dialog = SubcolunaSwapDialog(sub_labels, self)
-
-        if dialog.exec_():
-            idx1, idx2 = dialog.get_indices()
-            self.trocar_subcolunas_na_imagem(idx1, idx2)
-            QMessageBox.information(self, "Sucesso", "Subcolunas trocadas com sucesso.")
-    '''
     
     def abrir_dialogo_troca_subcolunas(self):
         image_filename = self.image_files[self.current_index]
@@ -429,7 +358,7 @@ class DataAugmentationWindow(QMainWindow):
             for col_index, coluna in enumerate(self.column_coordinates):
                 sub_rets = self.extrair_subcolunas_de_coluna(coluna)
                 for sub_index, sub_rect in enumerate(sub_rets):
-                    self.subcolunas.append((sub_rect, col_index, sub_index))  # sub_index de 0 a 5
+                    self.subcolunas.append((sub_rect, col_index, sub_index))
                 
             self.img_label.update()       
                 
@@ -451,34 +380,6 @@ class DataAugmentationWindow(QMainWindow):
             subcolunas.append(sub_rect)
         
         return subcolunas
-    
-    '''
-    def trocar_subcolunas_na_imagem(self, idx1, idx2):
-        if not self.pixmap:
-            return
-
-        # Cria uma cópia da imagem original
-        image = self.pixmap.toImage()
-        painter = QPainter()
-        swapped = QImage(image)
-
-        rect1, _, _ = self.subcolunas[idx1]
-        rect2, _, _ = self.subcolunas[idx2]
-
-        crop1 = image.copy(rect1)
-        crop2 = image.copy(rect2)
-
-        painter.begin(swapped)
-        painter.drawImage(rect1, crop2)
-        painter.drawImage(rect2, crop1)
-        painter.end()
-
-        self.pixmap = QPixmap.fromImage(swapped)
-        self.img_label.setPixmap(self.pixmap)
-        self.img_label.update()
-
-        return image
-    '''
 
     def trocar_subcolunas_na_imagem(self, idx1, idx2, imagem=None):
         if imagem is None:
@@ -505,8 +406,6 @@ class DataAugmentationWindow(QMainWindow):
 
         # Retorna imagem modificada como QImage
         return image_qt
-
-
     
     def copy_region(self, x1, y1, x2, y2):
         qimage = self.pixmap.toImage().convertToFormat(QImage.Format_RGBA8888)
