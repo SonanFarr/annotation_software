@@ -553,6 +553,7 @@ class MainWindow(QMainWindow):
             with open(json_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=4, ensure_ascii=False)
             print(f"Arquivo JSON salvo em: {json_path}")
+            self.column_coordinates.clear()
         except Exception as e:
             print(f"Erro ao salvar JSON: {e}")
 
