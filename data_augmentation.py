@@ -1,5 +1,5 @@
 # data_augmentation_window.py
-from PyQt5.QtWidgets import QMainWindow, QFileDialog, QLabel, QVBoxLayout, QGraphicsView, QGraphicsScene, QDialog, QComboBox, QPushButton, QInputDialog, QMessageBox
+from PyQt5.QtWidgets import QMainWindow, QFileDialog, QLabel, QVBoxLayout, QGraphicsView, QGraphicsScene, QDialog, QComboBox, QPushButton, QInputDialog, QMessageBox, QDialogButtonBox
 from PyQt5.QtCore import QStringListModel, QTimer, Qt, QRect
 from PyQt5 import uic
 from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen
@@ -210,7 +210,7 @@ class DataAugmentationWindow(QMainWindow):
         self.btn_trocar_subcolunas.clicked.connect(self.abrir_dialogo_troca_subcolunas)
 
         QTimer.singleShot(0, self.resize_img_frame)
-    
+    '''
     def abrir_dialogo_troca_subcolunas(self):
         image_filename = self.image_files[self.current_index]
         caminho = os.path.join(self.current_dir, image_filename)
@@ -316,6 +316,217 @@ class DataAugmentationWindow(QMainWindow):
             QMessageBox.information(self, "Sucesso", f"Imagem, TXT e JSON sintetizados salvos:\n{sintetic_image_name}\n{sintetic_json_name}\n{sintetic_txt_name}")
 
             self.show_img()  # Recarrega a imagem para refletir alterações visuais
+    '''
+    
+    def abrir_dialogo_troca_subcolunas(self):
+        import traceback
+        image_filename = self.image_files[self.current_index]
+        caminho = os.path.join(self.current_dir, image_filename)
+
+        if not getattr(self, "pixmap", None):
+            QMessageBox.warning(self, "Erro", "Nenhuma imagem carregada.")
+            return
+
+        if not self.column_coordinates:
+            QMessageBox.warning(self, "Erro", "Nenhuma coluna detectada.")
+            return
+
+        # Lê o arquivo JSON associado à imagem
+        json_path = os.path.splitext(caminho)[0] + '.json'
+        if not os.path.exists(json_path):
+            QMessageBox.warning(self, "Erro", f"Arquivo JSON não encontrado: {json_path}")
+            return
+
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            QMessageBox.warning(self, "Erro", f"Falha ao carregar JSON: {e}")
+            return
+
+        questions = data.get("questions", [])
+
+        total_sub = len(getattr(self, "subcolunas", []))
+        if total_sub < 2:
+            QMessageBox.warning(self, "Aviso", "Subcolunas insuficientes para trocar.")
+            return
+
+        visible_indices = [i for i in range(total_sub)]
+        sub_labels = [f"Subcoluna {i}" for i in visible_indices]
+
+        img_q = self.pixmap.toImage().convertToFormat(QImage.Format_RGB32)
+
+        def _col_index_from_sub(idx):
+            entry = self.subcolunas[idx]
+            if isinstance(entry, (tuple, list)) and len(entry) > 1:
+                return entry[1]
+            return None
+
+        def _sync_annotations_from_questions():
+            try:
+                for q in questions:
+                    qb = q.get("question_box", {})
+                    for ann in self.annotations:
+                        r = ann.rect
+                        if (r.x() == qb.get("x") and r.y() == qb.get("y")
+                                and r.width() == qb.get("width") and r.height() == qb.get("height")):
+                            ann.classe = q.get("mark", ann.classe)
+            except Exception:
+                traceback.print_exc()
+
+        # monta diálogo
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Trocar Subcolunas (múltiplas trocas)")
+        layout = QVBoxLayout(dialog)
+
+        h1 = QHBoxLayout()
+        h1.addWidget(QLabel("Primeira subcoluna:"))
+        combo1 = QComboBox()
+        combo1.addItems(sub_labels)
+        h1.addWidget(combo1)
+        layout.addLayout(h1)
+
+        h2 = QHBoxLayout()
+        h2.addWidget(QLabel("Segunda subcoluna:"))
+        combo2 = QComboBox()
+        combo2.addItems(sub_labels)
+        h2.addWidget(combo2)
+        layout.addLayout(h2)
+
+        h3 = QHBoxLayout()
+        h3.addWidget(QLabel("Nova classe para questões afetadas:"))
+        combo_classe = QComboBox()
+        combo_classe.addItems(["a", "b", "c", "d", "e", "f", "branco"])
+        h3.addWidget(combo_classe)
+        layout.addLayout(h3)
+
+        # botões de ação
+        botoes_layout = QHBoxLayout()
+        btn_add = QPushButton("Adicionar Troca")
+        btn_save = QPushButton("Finalizar e Salvar")
+        btn_cancel = QPushButton("Cancelar")
+        botoes_layout.addWidget(btn_add)
+        botoes_layout.addWidget(btn_save)
+        botoes_layout.addWidget(btn_cancel)
+        layout.addLayout(botoes_layout)
+
+        # estado mutável acessível pelas funções internas
+        state = {"img_q": img_q}
+
+        def aplicar_troca():
+            # mapear seleção para índices reais
+            sel1 = combo1.currentIndex()
+            sel2 = combo2.currentIndex()
+            if sel1 == sel2:
+                QMessageBox.warning(dialog, "Erro", "Escolha duas subcolunas diferentes.")
+                return
+
+            actual_idx1 = visible_indices[sel1]
+            actual_idx2 = visible_indices[sel2]
+            nova_classe = combo_classe.currentText()
+
+            try:
+                current_pixmap = QPixmap.fromImage(state["img_q"])
+                result = self.trocar_subcolunas_na_imagem(actual_idx1, actual_idx2, current_pixmap)
+            except Exception as e:
+                QMessageBox.warning(dialog, "Erro", f"Falha ao trocar subcolunas: {e}")
+                traceback.print_exc()
+                return
+
+            if isinstance(result, QImage):
+                state["img_q"] = result
+            elif isinstance(result, QPixmap):
+                state["img_q"] = result.toImage().convertToFormat(QImage.Format_RGB32)
+            else:
+                QMessageBox.warning(dialog, "Erro", "Função trocar_subcolunas_na_imagem retornou formato inesperado.")
+                return
+
+            # atualiza self.pixmap exibida
+            pixmap_sintetizado = QPixmap.fromImage(state["img_q"])
+            self.img_label.setPixmap(pixmap_sintetizado)
+            self.pixmap = pixmap_sintetizado  # atualiza referência interna
+
+            col1 = _col_index_from_sub(actual_idx1)
+            col2 = _col_index_from_sub(actual_idx2)
+            colunas_afetadas = set(c for c in (col1, col2) if c is not None)
+
+            for q in questions:
+                if q.get("column_index") in colunas_afetadas:
+                    q["mark"] = nova_classe
+
+            _sync_annotations_from_questions()
+
+            QMessageBox.information(dialog, "Troca aplicada", f"Troca aplicada entre subcolunas {actual_idx1} e {actual_idx2}.")
+
+        def salvar_e_sair():
+            # pede número para compor nome
+            numero, ok = QInputDialog.getInt(self, "Número da Versão", "Digite o número para o arquivo sintético:", 1, 1)
+            if not ok:
+                return
+
+            nome_original = os.path.splitext(os.path.basename(image_filename))[0]
+            novo_nome_base = f"{nome_original}_sintetic{numero}"
+
+            pasta = os.path.dirname(caminho)
+            sintetic_image_path = os.path.join(pasta, novo_nome_base + ".jpg")
+            sintetic_json_path = os.path.join(pasta, novo_nome_base + ".json")
+            sintetic_txt_path = os.path.join(pasta, novo_nome_base + ".txt")
+
+            try:
+                state["img_q"].save(sintetic_image_path, "JPG")
+            except Exception as e:
+                QMessageBox.warning(self, "Erro", f"Não foi possível salvar a imagem: {e}")
+                traceback.print_exc()
+                return
+
+            # Atualiza JSON e salva
+            data["image"] = os.path.basename(sintetic_image_path)
+            data["questions"] = questions
+            try:
+                with open(sintetic_json_path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=4, ensure_ascii=False)
+            except Exception as e:
+                QMessageBox.warning(self, "Erro", f"Não foi possível salvar o JSON: {e}")
+                traceback.print_exc()
+                return
+
+            img_width = state["img_q"].width()
+            img_height = state["img_q"].height()
+            mark_to_class = {"a":0,"b":1,"c":2,"d":3,"e":4,"f":5,"branco":6}
+            try:
+                with open(sintetic_txt_path, 'w', encoding='utf-8') as f:
+                    for q in questions:
+                        classe = q.get("mark", "branco")
+                        cls_id = mark_to_class.get(classe, 6)
+                        box = q.get("question_box", {})
+                        x = box.get("x", 0) / img_width
+                        y = box.get("y", 0) / img_height
+                        width = box.get("width", 0) / img_width
+                        height = box.get("height", 0) / img_height
+                        f.write(f"{cls_id} {x:.17f} {y:.17f} {width:.17f} {height:.17f}\n")
+            except Exception as e:
+                QMessageBox.warning(self, "Erro", f"Não foi possível salvar o TXT: {e}")
+                traceback.print_exc()
+                return
+
+            QMessageBox.information(self, "Sucesso",
+                                    f"Arquivos salvos:\n{os.path.basename(sintetic_image_path)}\n"
+                                    f"{os.path.basename(sintetic_json_path)}\n{os.path.basename(sintetic_txt_path)}")
+
+            # Atualiza a exibição principal para mostrar a imagem sintetizada
+            pixmap_final = QPixmap.fromImage(state["img_q"])
+            self.img_label.setPixmap(pixmap_final)
+            self.pixmap = pixmap_final
+
+            dialog.accept()
+
+        btn_add.clicked.connect(aplicar_troca)
+        btn_save.clicked.connect(salvar_e_sair)
+        btn_cancel.clicked.connect(dialog.reject)
+
+        dialog.exec_()
+        _sync_annotations_from_questions()
+        self.img_label.update()
     
     def wheelEvent(self, event):
         if event.angleDelta().y() > 0:
