@@ -2,7 +2,9 @@
 from PyQt5.QtWidgets import QMainWindow, QFileDialog, QLabel, QVBoxLayout, QGraphicsView, QGraphicsScene, QDialog, QComboBox, QPushButton, QInputDialog, QMessageBox, QDialogButtonBox
 from PyQt5.QtCore import QStringListModel, QTimer, Qt, QRect
 from PyQt5 import uic
-from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen
+from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
+from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen, QStandardItemModel, QStandardItem
+from collections import Counter
 import numpy as np
 import json
 import cv2
@@ -20,6 +22,7 @@ from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox
 class SubcolunaSwapDialog(QDialog):
     def __init__(self, subcolunas_labels, parent=None):
         super().__init__(parent)
+
         self.setWindowTitle("Selecionar Subcolunas para Troca")
 
         self.combo1 = QComboBox()
@@ -53,7 +56,7 @@ class SubcolunaSwapDialog(QDialog):
 
         layout.addWidget(btn_ok)
         self.setLayout(layout)
-
+        
     def accept_if_valid(self):
         if self.combo1.currentIndex() == self.combo2.currentIndex():
             QMessageBox.warning(self, "Erro", "Selecione duas subcolunas diferentes.")
@@ -66,7 +69,6 @@ class SubcolunaSwapDialog(QDialog):
             self.combo2.currentIndex(),
             self.class_selector.currentText()
         )
-
 
 class SelectNewClass(QDialog):
     def __init__(self, classes, current_class=None, parent=None):
@@ -210,6 +212,50 @@ class DataAugmentationWindow(QMainWindow):
         self.btn_trocar_subcolunas.clicked.connect(self.abrir_dialogo_troca_subcolunas)
 
         QTimer.singleShot(0, self.resize_img_frame)
+        
+        self.contar_classes_em_pasta()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_X:
+            self.contar_classes_em_pasta()
+        else:
+            super().keyPressEvent(event)
+
+    def contar_classes_em_pasta(self):
+        pasta = self.current_dir
+        contador = Counter()
+
+        if not os.path.exists(pasta):
+            self.table_class.clear()
+            self.table_class.setRowCount(0)
+            return
+
+        for nome_arquivo in os.listdir(pasta):
+            if nome_arquivo.lower().endswith(".json"):
+                caminho = os.path.join(pasta, nome_arquivo)
+                try:
+                    with open(caminho, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    for q in data.get("questions", []):
+                        mark = q.get("mark", "").strip().lower()
+                        if mark:
+                            contador[mark] += 1
+                except Exception as e:
+                    print(f"Erro {nome_arquivo}: {e}")
+
+        # Limpa a tabela e define cabeçalhos
+        self.table_class.clear()
+        self.table_class.setRowCount(0)
+        self.table_class.setColumnCount(2)
+        self.table_class.setHorizontalHeaderLabels(["Classe", "Quantidade"])
+        self.table_class.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+
+        # Preenche a tabela
+        for linha, (classe, qtd) in enumerate(sorted(contador.items())):
+            self.table_class.insertRow(linha)
+            self.table_class.setItem(linha, 0, QTableWidgetItem(classe))
+            self.table_class.setItem(linha, 1, QTableWidgetItem(str(qtd)))
+            
     '''
     def abrir_dialogo_troca_subcolunas(self):
         image_filename = self.image_files[self.current_index]
@@ -517,13 +563,17 @@ class DataAugmentationWindow(QMainWindow):
             pixmap_final = QPixmap.fromImage(state["img_q"])
             self.img_label.setPixmap(pixmap_final)
             self.pixmap = pixmap_final
-
+            
+            self.contar_classes_em_pasta()
+            
             dialog.accept()
+        
+            
 
         btn_add.clicked.connect(aplicar_troca)
         btn_save.clicked.connect(salvar_e_sair)
         btn_cancel.clicked.connect(dialog.reject)
-
+        
         dialog.exec_()
         _sync_annotations_from_questions()
         self.img_label.update()
@@ -556,6 +606,7 @@ class DataAugmentationWindow(QMainWindow):
             if self.image_files:
                 self.img_list_model.setStringList(self.image_files)
                 self.show_img()
+            self.contar_classes_em_pasta()
 
     def next_img(self):
         if self.image_files and self.current_index < len(self.image_files) - 1:
