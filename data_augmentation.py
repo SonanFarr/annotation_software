@@ -242,19 +242,25 @@ class DataAugmentationWindow(QMainWindow):
                             contador[mark] += 1
                 except Exception as e:
                     print(f"Erro {nome_arquivo}: {e}")
-
+        
+        itens = sorted(contador.items())
+        itens = [i for i in itens if i[0] != "branco"] + [i for i in itens if i[0] == "branco"]
+        
         # Limpa a tabela e define cabeçalhos
         self.table_class.clear()
         self.table_class.setRowCount(0)
         self.table_class.setColumnCount(2)
         self.table_class.setHorizontalHeaderLabels(["Classe", "Quantidade"])
         self.table_class.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        
+        rotulos = ["0-6", "1-7", "2-8", "3-9", "4-10", "5-11", "x"]
 
         # Preenche a tabela
-        for linha, (classe, qtd) in enumerate(sorted(contador.items())):
+        for linha, (classe, qtd) in enumerate(itens):
             self.table_class.insertRow(linha)
             self.table_class.setItem(linha, 0, QTableWidgetItem(classe))
             self.table_class.setItem(linha, 1, QTableWidgetItem(str(qtd)))
+            self.table_class.setVerticalHeaderItem(linha, QTableWidgetItem(rotulos[linha]))
             
     '''
     def abrir_dialogo_troca_subcolunas(self):
