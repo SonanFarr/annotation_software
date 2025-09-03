@@ -1,5 +1,5 @@
 # data_augmentation_window.py
-from PyQt5.QtWidgets import QMainWindow, QFileDialog, QLabel, QVBoxLayout, QGraphicsView, QGraphicsScene, QDialog, QComboBox, QPushButton, QInputDialog, QMessageBox, QDialogButtonBox
+from PyQt5.QtWidgets import QMainWindow, QFileDialog, QLabel, QVBoxLayout, QGraphicsView, QGraphicsScene, QDialog, QComboBox, QPushButton, QInputDialog, QMessageBox, QDialogButtonBox, QWidget
 from PyQt5.QtCore import QStringListModel, QTimer, Qt, QRect
 from PyQt5 import uic
 from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
@@ -13,7 +13,7 @@ import os
 HANDLE = 6
 LIMIAR_LARGURA = 800
 NUM_AREA_FRAC_6 = 0.30
-NUM_AREA_FRAC_3 = 0.502
+NUM_AREA_FRAC_3 = 0.478
 CIRCLE_RADIUS = 30
 ALTURA_CENTRO = 0.5
 
@@ -180,6 +180,8 @@ class DataAugmentationWindow(QMainWindow):
         ui_path = os.path.join(os.path.dirname(__file__), "gui", "augmentation_window.ui")
         uic.loadUi(ui_path, self)
 
+        self.num_alternativas = 6
+
         self.image_files = []
         self.current_dir = ""
         self.current_index = 0
@@ -210,11 +212,35 @@ class DataAugmentationWindow(QMainWindow):
         self.next_img_button.clicked.connect(self.next_img)
         self.prev_img_button.clicked.connect(self.prev_img)
         self.btn_trocar_subcolunas.clicked.connect(self.abrir_dialogo_troca_subcolunas)
+    
+        self.num_alternativas = 6
+        self.alt_selector_widget = QWidget(self)
+        alt_layout = QHBoxLayout(self.alt_selector_widget)
+        alt_layout.setContentsMargins(0, 0, 0, 0)
+        alt_layout.setSpacing(6)
+
+        lbl_alt = QLabel("Quantidade de alternativas:")
+        self.combo_num_alt = QComboBox()
+        self.combo_num_alt.addItems(["3", "6"])
+        self.combo_num_alt.setCurrentText(str(self.num_alternativas))
+        self.combo_num_alt.currentTextChanged.connect(self.on_num_alternativas_changed)
+
+        alt_layout.addWidget(lbl_alt)
+        alt_layout.addWidget(self.combo_num_alt)
+        alt_layout.addStretch()
+
+        form_layout = self.groupBox.layout()
+        row = form_layout.rowCount() - 1
+        form_layout.insertRow(row, self.alt_selector_widget)
 
         QTimer.singleShot(0, self.resize_img_frame)
         
         self.contar_classes_em_pasta()
 
+    def on_num_alternativas_changed(self):
+        self.num_alternativas = int(self.combo_num_alternativas.currentText())
+        self.show_img()  # recarrega imagem e redesenha subcolunas
+    
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_X:
             self.contar_classes_em_pasta()
@@ -261,114 +287,6 @@ class DataAugmentationWindow(QMainWindow):
             self.table_class.setItem(linha, 0, QTableWidgetItem(classe))
             self.table_class.setItem(linha, 1, QTableWidgetItem(str(qtd)))
             self.table_class.setVerticalHeaderItem(linha, QTableWidgetItem(rotulos[linha]))
-            
-    '''
-    def abrir_dialogo_troca_subcolunas(self):
-        image_filename = self.image_files[self.current_index]
-        caminho = os.path.join(self.current_dir, image_filename)
-        
-        if not self.pixmap:
-            QMessageBox.warning(self, "Erro", "Nenhuma imagem carregada.")
-            return
-
-        if not self.column_coordinates:
-            QMessageBox.warning(self, "Erro", "Nenhuma coluna detectada.")
-            return
-
-        # Lê o arquivo JSON associado à imagem
-        json_path = os.path.splitext(caminho)[0] + '.json'
-        if not os.path.exists(json_path):
-            QMessageBox.warning(self, "Erro", f"Arquivo JSON não encontrado: {json_path}")
-            return
-
-        with open(json_path, "r", encoding="utf-8") as f:
-            try:
-                data = json.load(f)
-            except Exception as e:
-                QMessageBox.warning(self, "Erro", f"Falha ao carregar JSON: {e}")
-                return
-
-        self.questions = data.get("questions", [])
-
-        # Monta os nomes das subcolunas disponíveis (ignorando a de número, se necessário)
-        sub_labels = [f"Subcoluna {i}" for i in range(len(self.subcolunas))]
-
-        # Abre o diálogo personalizado
-        dialog = SubcolunaSwapDialog(sub_labels, self)
-        if dialog.exec_():
-            idx1, idx2, nova_classe = dialog.get_selection()
-
-            # Troca visual das subcolunas na imagem
-            imagem_sintetizada = self.trocar_subcolunas_na_imagem(idx1, idx2, self.pixmap)
-            
-            # Converte para QPixmap para exibição
-            pixmap_sintetizado = QPixmap.fromImage(imagem_sintetizada)
-
-            # Atualiza o QLabel ou widget de imagem com a nova imagem
-            self.img_label.setPixmap(pixmap_sintetizado)
-
-            # Determina quais colunas foram afetadas (com base no índice de subcolunas)
-            col1 = self.subcolunas[idx1][1]
-            col2 = self.subcolunas[idx2][1]
-            colunas_afetadas = set([col1, col2])
-
-            # Atualiza a classe ("mark") das questões nas colunas afetadas
-            for q in self.questions:
-                if q.get("column_index") in colunas_afetadas:
-                    q["mark"] = nova_classe
-
-            # Novo nome da imagem e JSON
-            sintetic_image_name = os.path.basename(os.path.splitext(caminho)[0]) + "_sintetic.jpg"
-            sintetic_json_name = os.path.basename(os.path.splitext(caminho)[0]) + "_sintetic.json"
-            sintetic_txt_name = os.path.basename(os.path.splitext(caminho)[0]) + "_sintetic.txt"
-
-            sintetic_image_path = os.path.join(os.path.dirname(os.path.splitext(caminho)[0]), sintetic_image_name)
-            sintetic_json_path = os.path.join(os.path.dirname(json_path), sintetic_json_name)
-            sintetic_txt_path = os.path.join(os.path.dirname(json_path), sintetic_txt_name)
-
-            # Salva nova imagem
-            imagem_sintetizada.save(sintetic_image_path, "JPG")
-
-            # Atualiza o nome da imagem no JSON e salva o novo arquivo
-            data["image"] = sintetic_image_name
-            data["questions"] = self.questions
-
-            with open(sintetic_json_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4, ensure_ascii=False)
-
-            #Gera novo txt
-            img_width = self.pixmap.width()
-            img_height = self.pixmap.height()
-
-            # Classe para ID
-            mark_to_class = {
-                "a": 0,
-                "b": 1,
-                "c": 2,
-                "d": 3,
-                "e": 4,
-                "f": 5,
-                "branco": 6
-            }
-
-            with open(sintetic_txt_path, 'w', encoding='utf-8') as f:
-                for q in self.questions:
-                    classe = q["mark"] 
-                    cls_id = mark_to_class[classe]
-
-                    box = q["question_box"]
-
-                    x = box["x"] / img_width
-                    y = box["y"] / img_height
-                    width = box["width"] / img_width
-                    height = box["height"] / img_height
-                     
-                    f.write(f"{cls_id} {x:.17f} {y:.17f} {width:.17f} {height:.17f}\n")
-
-            QMessageBox.information(self, "Sucesso", f"Imagem, TXT e JSON sintetizados salvos:\n{sintetic_image_name}\n{sintetic_json_name}\n{sintetic_txt_name}")
-
-            self.show_img()  # Recarrega a imagem para refletir alterações visuais
-    '''
     
     def abrir_dialogo_troca_subcolunas(self):
         import traceback
@@ -572,9 +490,7 @@ class DataAugmentationWindow(QMainWindow):
             
             self.contar_classes_em_pasta()
             
-            dialog.accept()
-        
-            
+            dialog.accept()      
 
         btn_add.clicked.connect(aplicar_troca)
         btn_save.clicked.connect(salvar_e_sair)
@@ -651,11 +567,20 @@ class DataAugmentationWindow(QMainWindow):
             for col in data.get("columns", []):
                 rect = QRect(col["x"], col["y"], col["width"], col["height"])
                 self.column_coordinates.append(AnnotationBox(rect, "x"))
+            
+            for col_index, coluna in enumerate(self.column_coordinates):
+                col_width = coluna.rect.width()
 
-            # Extrair subcolunas de alternativas (ignorando área dos números)
+                if self.num_alternativas == 3:
+                    frac_num = NUM_AREA_FRAC_3 if col_width < LIMIAR_LARGURA else NUM_AREA_FRAC_6
+                else:
+                    frac_num = NUM_AREA_FRAC_6
+
             self.subcolunas.clear()
             for col_index, coluna in enumerate(self.column_coordinates):
-                sub_rets = self.extrair_subcolunas_de_coluna(coluna)
+                sub_rets = self.extrair_subcolunas_de_coluna(coluna, 
+                                                            num_subcolunas=self.num_alternativas,
+                                                            frac_num_area=frac_num)
                 for sub_index, sub_rect in enumerate(sub_rets):
                     self.subcolunas.append((sub_rect, col_index, sub_index))
                 
