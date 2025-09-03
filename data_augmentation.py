@@ -292,15 +292,13 @@ class DataAugmentationWindow(QMainWindow):
         self.table_class.setColumnCount(2)
         self.table_class.setHorizontalHeaderLabels(["Classe", "Quantidade"])
         self.table_class.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        
-        rotulos = ["0-6", "1-7", "2-8", "3-9", "4-10", "5-11", "x"]
 
         # Preenche a tabela
         for linha, (classe, qtd) in enumerate(itens):
             self.table_class.insertRow(linha)
             self.table_class.setItem(linha, 0, QTableWidgetItem(classe))
             self.table_class.setItem(linha, 1, QTableWidgetItem(str(qtd)))
-            self.table_class.setVerticalHeaderItem(linha, QTableWidgetItem(rotulos[linha]))
+
     
     def abrir_dialogo_troca_subcolunas(self):
         import traceback
@@ -334,9 +332,16 @@ class DataAugmentationWindow(QMainWindow):
         if total_sub < 2:
             QMessageBox.warning(self, "Aviso", "Subcolunas insuficientes para trocar.")
             return
-
+        if self.num_alternativas == 3:
+            class_names = ["A", "B", "C"]
+        else :
+            class_names = ["A", "B", "C", "D", "E", "F"]
         visible_indices = [i for i in range(total_sub)]
-        sub_labels = [f"Subcoluna {i}" for i in visible_indices]
+
+        sub_labels = [
+            f"Subcoluna {i+1} - ({class_names[i % len(class_names)]})"
+            for i in visible_indices
+        ]
 
         img_q = self.pixmap.toImage().convertToFormat(QImage.Format_RGB32)
 
