@@ -181,6 +181,12 @@ class DataAugmentationWindow(QMainWindow):
         uic.loadUi(ui_path, self)
 
         self.num_alternativas = 6
+        
+        lbl_alt = QLabel("Quantidade de alternativas:")
+        self.combo_num_alt = QComboBox()
+        self.combo_num_alt.addItems(["3", "6"])
+        self.combo_num_alt.setCurrentText(str(self.num_alternativas))
+        self.combo_num_alt.currentTextChanged.connect(self.on_num_alternativas_changed)
 
         self.image_files = []
         self.current_dir = ""
@@ -213,17 +219,10 @@ class DataAugmentationWindow(QMainWindow):
         self.prev_img_button.clicked.connect(self.prev_img)
         self.btn_trocar_subcolunas.clicked.connect(self.abrir_dialogo_troca_subcolunas)
     
-        self.num_alternativas = 6
         self.alt_selector_widget = QWidget(self)
         alt_layout = QHBoxLayout(self.alt_selector_widget)
         alt_layout.setContentsMargins(0, 0, 0, 0)
         alt_layout.setSpacing(6)
-
-        lbl_alt = QLabel("Quantidade de alternativas:")
-        self.combo_num_alt = QComboBox()
-        self.combo_num_alt.addItems(["3", "6"])
-        self.combo_num_alt.setCurrentText(str(self.num_alternativas))
-        self.combo_num_alt.currentTextChanged.connect(self.on_num_alternativas_changed)
 
         alt_layout.addWidget(lbl_alt)
         alt_layout.addWidget(self.combo_num_alt)
@@ -238,8 +237,23 @@ class DataAugmentationWindow(QMainWindow):
         self.contar_classes_em_pasta()
 
     def on_num_alternativas_changed(self):
-        self.num_alternativas = int(self.combo_num_alternativas.currentText())
-        self.show_img()  # recarrega imagem e redesenha subcolunas
+        self.num_alternativas = int(self.combo_num_alt.currentText())
+        
+        for col_index, coluna in enumerate(self.column_coordinates):
+            col_width = coluna.rect.width()
+
+            if self.num_alternativas == 3:
+                frac_num = NUM_AREA_FRAC_3 if col_width < LIMIAR_LARGURA else NUM_AREA_FRAC_6
+            else:
+                frac_num = NUM_AREA_FRAC_6
+        
+        self.subcolunas.clear()
+        for col_index, coluna in enumerate(self.column_coordinates):
+            sub_rets = self.extrair_subcolunas_de_coluna(coluna, 
+                                                        num_subcolunas=self.num_alternativas,
+                                                        frac_num_area=frac_num)
+            for sub_index, sub_rect in enumerate(sub_rets):
+                self.subcolunas.append((sub_rect, col_index, sub_index))
     
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_X:
@@ -576,6 +590,7 @@ class DataAugmentationWindow(QMainWindow):
                 else:
                     frac_num = NUM_AREA_FRAC_6
 
+            
             self.subcolunas.clear()
             for col_index, coluna in enumerate(self.column_coordinates):
                 sub_rets = self.extrair_subcolunas_de_coluna(coluna, 
@@ -583,7 +598,7 @@ class DataAugmentationWindow(QMainWindow):
                                                             frac_num_area=frac_num)
                 for sub_index, sub_rect in enumerate(sub_rets):
                     self.subcolunas.append((sub_rect, col_index, sub_index))
-                
+            
             self.img_label.update()       
                 
     def extrair_subcolunas_de_coluna(self, coluna: AnnotationBox, num_subcolunas=6, frac_num_area=0.3):
