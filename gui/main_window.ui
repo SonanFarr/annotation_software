@@ -107,10 +107,17 @@
             </property>
            </widget>
           </item>
-          <item row="6" column="0">
+          <item row="7" column="0">
            <widget class="QPushButton" name="new_window_button">
             <property name="text">
-             <string>Nova Janela</string>
+             <string>Aumento de Dados</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="0">
+           <widget class="QPushButton" name="alternativa_button">
+            <property name="text">
+             <string>Alterar para 6 Alternativas</string>
             </property>
            </widget>
           </item>

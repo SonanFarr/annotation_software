@@ -28,6 +28,8 @@ NUM_AREA_FRAC_3 = 0.502
 CIRCLE_RADIUS = 30
 ALTURA_CENTRO = 0.5 
 
+ALTERNATIVA_NUM = 3
+
 class AnnotationBox:
     def __init__(self, rect: QRect, classe: str, col_index: int = -1):
         self.rect = rect 
@@ -268,7 +270,7 @@ class ImageLabel(QLabel):
             if classe not in ['a', 'b', 'c', 'd', 'e', 'f', 'branco']:
                 continue 
 
-            num_alternativas = 3 if box.rect.width() < LIMIAR_LARGURA else 6
+            num_alternativas = ALTERNATIVA_NUM
             opcoes_validas = ['a', 'b', 'c'] if num_alternativas == 3 else ['a', 'b', 'c', 'd', 'e', 'f']
             
             if classe == 'branco' or classe not in opcoes_validas:
@@ -281,7 +283,7 @@ class ImageLabel(QLabel):
             start_x = box.rect.left()
             start_y = box.rect.top()
 
-            if(num_alternativas == 3):
+            if(num_alternativas == 3 and box.rect.width() < LIMIAR_LARGURA):
                 alt_area_x = start_x + int(total_w * NUM_AREA_FRAC_3)
                 alt_area_w = int(total_w * (1 - NUM_AREA_FRAC_3))
             else:
@@ -290,10 +292,10 @@ class ImageLabel(QLabel):
 
             # Largura da alternativa + espaço
             espacamento = 0.1
-            num_espacos = num_alternativas + 1
+            num_espacos = ALTERNATIVA_NUM + 1
             total_espaco = alt_area_w * espacamento
             largura_util = alt_area_w - total_espaco
-            largura_alt = largura_util / num_alternativas
+            largura_alt = largura_util / ALTERNATIVA_NUM
             largura_esp = total_espaco / num_espacos
 
             # Posição do centro do marcador
@@ -360,12 +362,26 @@ class MainWindow(QMainWindow):
         self.prev_img_button.clicked.connect(self.prev_img)
         self.save_img_button.clicked.connect(self.save_img)
         self.new_window_button.clicked.connect(self.open_new_window)
-
+        self.alternativa_button.clicked.connect(self.change_alternativa_num)
+        if ALTERNATIVA_NUM == 3:
+            self.alternativa_button.setText("Anotar 6 alternativas")
+        elif ALTERNATIVA_NUM == 6:
+            self.alternativa_button.setText("Anotar 3 alternativas")
+        
         # Espera um tempo para ajustar o tamanho do img_frame corretamente
         QTimer.singleShot(0, self.resize_img_frame)
         
         self.setFocusPolicy(Qt.StrongFocus)
         self.setFocus()
+        
+    def change_alternativa_num(self):
+        global ALTERNATIVA_NUM
+        if ALTERNATIVA_NUM == 3:
+            ALTERNATIVA_NUM = 6
+            self.alternativa_button.setText("Anotar 3 alternativas")
+        elif ALTERNATIVA_NUM == 6:
+            ALTERNATIVA_NUM = 3   
+            self.alternativa_button.setText("Anotar 6 alternativas")
 
     def open_new_window(self):
         self.augment_window = DataAugmentationWindow(self)
@@ -582,7 +598,7 @@ class MainWindow(QMainWindow):
         self.column_coordinates.append(rect)
         col_index = len(self.column_coordinates) - 1
         
-        opcoes = ["a", "b", "c", "branco"] if rect.width() < LIMIAR_LARGURA else ["a", "b", "c", "d", "e", "f", "branco"]
+        opcoes = ["a", "b", "c", "branco"] if ALTERNATIVA_NUM == 3 else ["a", "b", "c", "d", "e", "f", "branco"]
 
         altura_media = 58.5
         num_caixas = int(rect.height() // altura_media)
