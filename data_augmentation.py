@@ -32,7 +32,7 @@ class SubcolunaSwapDialog(QDialog):
         self.combo2.addItems(subcolunas_labels)
 
         self.class_selector = QComboBox()
-        self.class_selector.addItems(["a", "b", "c", "d", "e", "f", "branco"])
+        self.class_selector.addItems(["a", "b", "c", "d", "e", "f", "branco", "indeterminado"])
 
         layout = QVBoxLayout()
         row1 = QHBoxLayout()
@@ -385,7 +385,7 @@ class DataAugmentationWindow(QMainWindow):
         h3 = QHBoxLayout()
         h3.addWidget(QLabel("Nova classe para questões afetadas:"))
         combo_classe = QComboBox()
-        combo_classe.addItems(["a", "b", "c", "d", "e", "f", "branco"])
+        combo_classe.addItems(["a", "b", "c", "d", "e", "f", "branco", "indeterminado"])
         h3.addWidget(combo_classe)
         layout.addLayout(h3)
 
@@ -481,7 +481,7 @@ class DataAugmentationWindow(QMainWindow):
 
             img_width = state["img_q"].width()
             img_height = state["img_q"].height()
-            mark_to_class = {"a":0,"b":1,"c":2,"d":3,"e":4,"f":5,"branco":6}
+            mark_to_class = {"a":0,"b":1,"c":2,"d":3,"e":4,"f":5,"branco":6,"indeterminado":7}
             try:
                 with open(sintetic_txt_path, 'w', encoding='utf-8') as f:
                     for q in questions:

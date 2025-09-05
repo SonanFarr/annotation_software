@@ -267,12 +267,18 @@ class ImageLabel(QLabel):
 
             # Desenhar círculo amarelo na alternativa marcada
             classe = box.classe.lower()
-            if classe not in ['a', 'b', 'c', 'd', 'e', 'f', 'branco']:
+            if classe not in ['a', 'b', 'c', 'd', 'e', 'f', 'branco', 'indeterminado']:
                 continue 
 
             num_alternativas = ALTERNATIVA_NUM
             opcoes_validas = ['a', 'b', 'c'] if num_alternativas == 3 else ['a', 'b', 'c', 'd', 'e', 'f']
             
+            if classe == 'indeterminado':
+                p.setPen(QPen(Qt.blue, 8, Qt.SolidLine))
+                p.drawLine(box.rect.topLeft(), box.rect.bottomRight())
+                p.drawLine(box.rect.topRight(), box.rect.bottomLeft())
+                continue
+
             if classe == 'branco' or classe not in opcoes_validas:
                 continue
 
@@ -512,7 +518,8 @@ class MainWindow(QMainWindow):
             "d": 3,
             "e": 4,
             "f": 5,
-            "branco": 6
+            "branco": 6,
+            "indeterminado": 7
         }
 
         try:
@@ -598,7 +605,7 @@ class MainWindow(QMainWindow):
         self.column_coordinates.append(rect)
         col_index = len(self.column_coordinates) - 1
         
-        opcoes = ["a", "b", "c", "branco"] if ALTERNATIVA_NUM == 3 else ["a", "b", "c", "d", "e", "f", "branco"]
+        opcoes = ["a", "b", "c", "branco", "indeterminado"] if ALTERNATIVA_NUM == 3 else ["a", "b", "c", "d", "e", "f", "branco", "indeterminado"]
 
         altura_media = 58.5
         num_caixas = int(rect.height() // altura_media)
