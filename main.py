@@ -373,12 +373,30 @@ class MainWindow(QMainWindow):
             self.alternativa_button.setText("Anotar 6 alternativas")
         elif ALTERNATIVA_NUM == 6:
             self.alternativa_button.setText("Anotar 3 alternativas")
+            
+        # Botão para resetar anotações
+        self.reset_annotations_button = QPushButton("Resetar Anotações", self)
+        self.groupBox.layout().addRow(self.reset_annotations_button)
+        self.reset_annotations_button.clicked.connect(self.reset_annotations)
         
         # Espera um tempo para ajustar o tamanho do img_frame corretamente
         QTimer.singleShot(0, self.resize_img_frame)
         
         self.setFocusPolicy(Qt.StrongFocus)
         self.setFocus()
+        
+    def reset_annotations(self):
+        """Apaga todas as anotações da imagem atual (colunas, questões, classes)."""
+        self.annotations.clear()
+        self.column_coordinates.clear()
+        if self.image_files:
+            fname = self.image_files[self.current_index]
+            if fname in self.annotations_cache:
+                del self.annotations_cache[fname]
+        self.update_annotations_list()
+        self.img_label.update()
+        print("Anotações resetadas para a imagem atual.")
+
         
     def change_alternativa_num(self):
         global ALTERNATIVA_NUM
