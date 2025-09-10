@@ -393,10 +393,12 @@ class DataAugmentationWindow(QMainWindow):
         botoes_layout = QHBoxLayout()
         btn_add = QPushButton("Adicionar Troca")
         btn_save = QPushButton("Finalizar e Salvar")
+        btn_ind = QPushButton("Sintetizar Indeterminado")
         btn_cancel = QPushButton("Cancelar")
         botoes_layout.addWidget(btn_add)
         botoes_layout.addWidget(btn_save)
         botoes_layout.addWidget(btn_cancel)
+        botoes_layout.addWidget(btn_ind)
         layout.addLayout(botoes_layout)
 
         # estado mutável acessível pelas funções internas
@@ -511,9 +513,38 @@ class DataAugmentationWindow(QMainWindow):
             
             dialog.accept()      
 
+
+        def sintetizar_indeterminado():
+            dialog_ind = QDialog(self)
+            dialog_ind.setWindowTitle("Indeterminado")
+            layout = QVBoxLayout(dialog_ind)
+            
+            # Agrupar questões por coluna
+            colunas_marks = {}
+            for q in questions:
+                col_idx = q.get("column_index")
+                mark = q.get("mark", "").strip().lower()
+                colunas_marks.setdefault(col_idx, []).append(mark)
+
+            # Analisar cada coluna
+            for col_idx, marks in colunas_marks.items():
+                if all(m == marks[0] for m in marks):
+                    texto = f"Coluna {col_idx+1}: {marks[0]}"
+                else:
+                    texto = f"Coluna {col_idx+1}: marcações diferentes"
+                layout.addWidget(QLabel(texto))
+
+            btn_ok = QPushButton("Fechar")
+            btn_ok.clicked.connect(dialog_ind.accept)
+            layout.addWidget(btn_ok)
+
+            dialog_ind.exec_()
+             
+
         btn_add.clicked.connect(aplicar_troca)
         btn_save.clicked.connect(salvar_e_sair)
         btn_cancel.clicked.connect(dialog.reject)
+        btn_ind.clicked.connect(sintetizar_indeterminado)
         
         dialog.exec_()
         _sync_annotations_from_questions()
