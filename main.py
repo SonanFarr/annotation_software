@@ -1,7 +1,7 @@
 import sys
 import os
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QLabel
+from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QLabel, QInputDialog
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import QStringListModel
 from PyQt5 import uic
@@ -397,7 +397,7 @@ class MainWindow(QMainWindow):
         self.img_label.update()
         print("Anotações resetadas para a imagem atual.")
 
-        
+
     def change_alternativa_num(self):
         global ALTERNATIVA_NUM
         if ALTERNATIVA_NUM == 3:
@@ -412,12 +412,29 @@ class MainWindow(QMainWindow):
         self.augment_window.show()
 
     def keyPressEvent(self, event):
+        #Deletar anotação selecionada
         if event.key() == Qt.Key_Z:
             if self.selected_box and self.selected_box in self.annotations:
                 self.annotations.remove(self.selected_box)
                 self.selected_box = None
                 self.update_annotations_list()
                 self.img_label.update()
+        #Alterar classe da anotação selecioanda
+        elif event.key() == Qt.Key_E:
+            if self.selected_box:
+                if ALTERNATIVA_NUM == 3:
+                    opcoes = ["a", "b", "c", "branco", "indeterminado"]
+                else :
+                    opcoes = ["a", "b", "c", "d", "e", "f", "branco", "indeterminado"]
+                classe, ok = QInputDialog.getItem(
+                    self, "Alterar Classe",
+                    "Selecione a nova classe:", opcoes,
+                    editable=False
+                )
+                if ok and classe:
+                    self.selected_box.classe = classe.lower()
+                    self.update_annotations_list()
+                    self.img_label.update()
     
     def wheelEvent(self, event):
         if event.angleDelta().y() > 0:
