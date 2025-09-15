@@ -9,6 +9,9 @@ import numpy as np
 import json
 import cv2
 import os
+import itertools
+from copy import deepcopy
+import random
 
 HANDLE = 6
 LIMIAR_LARGURA = 800
@@ -173,6 +176,36 @@ class ImageLabel(QLabel):
                 p.setPen(QPen(Qt.darkYellow, 1, Qt.DotLine))
                 p.drawRect(sub_rect)
 
+class SinteseIndeterminado(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Configurar Síntese Múltipla")
+
+        layout = QVBoxLayout(self)
+
+        # Seleção da quantidade de alternativas
+        self.alt_combo = QComboBox()
+        self.alt_combo.addItems(["3", "6"])
+        layout.addWidget(QLabel("Número de alternativas:"))
+        layout.addWidget(self.alt_combo)
+
+        # Seleção da alternativa originalmente marcada
+        self.mark_combo = QComboBox()
+        self.mark_combo.addItems(["a", "b", "c", "d", "e", "f"])
+        layout.addWidget(QLabel("Alternativa originalmente marcada:"))
+        layout.addWidget(self.mark_combo)
+
+        button_layout = QHBoxLayout()
+        ok_btn = QPushButton("OK")
+        cancel_btn = QPushButton("Cancelar")
+        ok_btn.clicked.connect(self.accept)
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(ok_btn)
+        button_layout.addWidget(cancel_btn)
+        layout.addLayout(button_layout)
+
+    def get_selection(self):
+        return int(self.alt_combo.currentText()), self.mark_combo.currentText()
 
 class DataAugmentationWindow(QMainWindow):
     def __init__(self, parent=None):
@@ -231,6 +264,8 @@ class DataAugmentationWindow(QMainWindow):
         form_layout = self.groupBox.layout()
         row = form_layout.rowCount() - 1
         form_layout.insertRow(row, self.alt_selector_widget)
+        
+        self.btn_ind_sintese.clicked.connect(self.sintese_indeterminado)
 
         QTimer.singleShot(0, self.resize_img_frame)
         
@@ -298,8 +333,7 @@ class DataAugmentationWindow(QMainWindow):
             self.table_class.insertRow(linha)
             self.table_class.setItem(linha, 0, QTableWidgetItem(classe))
             self.table_class.setItem(linha, 1, QTableWidgetItem(str(qtd)))
-
-    
+ 
     def abrir_dialogo_troca_subcolunas(self):
         import traceback
         image_filename = self.image_files[self.current_index]
@@ -722,3 +756,168 @@ class DataAugmentationWindow(QMainWindow):
         self.pixmap = QPixmap.fromImage(new_qimage)
         self.img_label.setPixmap(self.pixmap)
         self.img_label.resize(self.pixmap.size())
+    
+    def sintese_indeterminado(self):
+        if not self.image_files:
+            QMessageBox.warning(self, "Erro", "Nenhuma imagem carregada.")
+            return
+        if not self.column_coordinates:
+            QMessageBox.warning(self, "Erro", "Nenhuma coluna detectada.")
+            return
+
+        # número de alternativas pelo combo
+        num_alt = self.num_alternativas
+        if num_alt not in (3, 6):
+            QMessageBox.warning(self, "Erro", "Número de alternativas inválido (apenas 3 ou 6).")
+            return
+
+        # pede quantas sínteses o usuário deseja
+        total_possibilidades = 2**num_alt - (num_alt + 1)  # todas menos as combinações com 0 ou 1 marcado
+        qtd, ok = QInputDialog.getInt(
+            self, "Quantidade de sínteses",
+            f"Existem {total_possibilidades} possibilidades.\nQuantas deseja gerar?",
+            min(1, total_possibilidades), 1, total_possibilidades, 1
+        )
+        if not ok or qtd <= 0:
+            return
+
+        # lê JSON e recupera a alternativa marcada por coluna
+        image_filename = self.image_files[self.current_index]
+        caminho = os.path.join(self.current_dir, image_filename)
+        json_path = os.path.splitext(caminho)[0] + '.json'
+        if not os.path.exists(json_path):
+            QMessageBox.warning(self, "Erro", f"JSON base não encontrado: {json_path}")
+            return
+
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                base_data = json.load(f)
+        except Exception as e:
+            QMessageBox.warning(self, "Erro", f"Falha ao abrir JSON: {e}")
+            return
+
+        col_source_map = {}
+        for col_idx, _ in enumerate(self.column_coordinates):
+            marcada = None
+            for q in base_data.get("questions", []):
+                if q.get("column_index") == col_idx:
+                    mark = q.get("mark", "").lower()
+                    if mark in ["a", "b", "c", "d", "e", "f"]:
+                        marcada = ["a", "b", "c", "d", "e", "f"].index(mark)
+                        break
+            if marcada is None:
+                marcada = 0
+            col_source_map[col_idx] = marcada
+
+        # chama a função principal
+        self.gerar_sinteses_multimarcacao(num_alt, col_source_map, qtd)
+
+    def gerar_sinteses_multimarcacao(self, num_alternativas: int, col_source_map: dict, qtd: int):
+        if not getattr(self, "pixmap", None) or self.pixmap.isNull():
+            QMessageBox.warning(self, "Erro", "Nenhuma imagem carregada.")
+            return
+        if not self.column_coordinates:
+            QMessageBox.warning(self, "Erro", "Nenhuma coluna encontrada.")
+            return
+
+        image_filename = self.image_files[self.current_index]
+        caminho = os.path.join(self.current_dir, image_filename)
+        json_path = os.path.splitext(caminho)[0] + '.json'
+        if not os.path.exists(json_path):
+            QMessageBox.warning(self, "Erro", f"JSON base não encontrado: {json_path}")
+            return
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                base_data = json.load(f)
+        except Exception as e:
+            QMessageBox.warning(self, "Erro", f"Falha ao abrir JSON: {e}")
+            return
+
+        # calcula subcolunas por coluna
+        sub_por_col = {}
+        for col_idx, col_rect in enumerate(self.column_coordinates):
+            col_width = col_rect.rect.width()
+            if num_alternativas == 3:
+                frac_num = NUM_AREA_FRAC_3 if col_width < LIMIAR_LARGURA else NUM_AREA_FRAC_6
+            else:
+                frac_num = NUM_AREA_FRAC_6
+            alt_rects = self.extrair_subcolunas_de_coluna(
+                col_rect,
+                num_subcolunas=num_alternativas,
+                frac_num_area=frac_num
+            )
+            sub_por_col[col_idx] = alt_rects
+
+        # gera combinações válidas
+        combos = [bits for bits in itertools.product([0, 1], repeat=num_alternativas) if sum(bits) >= 2]
+
+        # seleciona aleatoriamente as desejadas
+        if qtd < len(combos):
+            combos = random.sample(combos, qtd)
+
+        nome_original = os.path.splitext(image_filename)[0]
+        seq = 0
+
+        for bits in combos:
+            img_q = self.pixmap.toImage().convertToFormat(QImage.Format_RGB32)
+            painter = QPainter(img_q)
+
+            for col_idx, alt_rects in sub_por_col.items():
+                chosen_rel = col_source_map.get(col_idx, 0)
+                if chosen_rel < 0 or chosen_rel >= num_alternativas:
+                    chosen_rel = 0
+
+                source_rect = alt_rects[chosen_rel]
+                source_pix = self.pixmap.copy(source_rect)
+
+                idx_nao_marcado = next((i for i in range(num_alternativas) if i != chosen_rel), 0)
+                source_nao_marcado = self.pixmap.copy(alt_rects[idx_nao_marcado])
+
+                for rel_pos, target_rect in enumerate(alt_rects):
+                    if bits[rel_pos] == 1:
+                        painter.drawPixmap(target_rect.topLeft(), source_pix)
+                    else:
+                        painter.drawPixmap(target_rect.topLeft(), source_nao_marcado)
+            painter.end()
+
+            # JSON copia e ajusta
+            data_copy = deepcopy(base_data)
+            for q in data_copy.get("questions", []):
+                q["mark"] = "indeterminado"
+                q["marks"] = []
+
+            # adiciona subcolunas no JSON
+            for col_idx, alt_rects in sub_por_col.items():
+                if col_idx < len(data_copy["columns"]):
+                    sub_list = []
+                    for r in alt_rects:
+                        sub_list.append({
+                            "x": r.left(),
+                            "y": r.top(),
+                            "width": r.width(),
+                            "height": r.height()
+                        })
+                    data_copy["columns"][col_idx]["subcolumns"] = sub_list
+
+            # salvar
+            out_base = os.path.join(self.current_dir, f"{nome_original}_ind{seq+1}")
+            img_q.save(out_base + ".jpg", "JPG")
+
+            data_copy["image"] = os.path.basename(out_base + ".jpg")
+            with open(out_base + ".json", "w", encoding="utf-8") as fj:
+                json.dump(data_copy, fj, indent=4, ensure_ascii=False)
+
+            img_w, img_h = img_q.width(), img_q.height()
+            with open(out_base + ".txt", "w", encoding="utf-8") as ft:
+                for q in data_copy.get("questions", []):
+                    cls_id = 7
+                    box = q.get("question_box", {})
+                    x = box.get("x", 0) / img_w
+                    y = box.get("y", 0) / img_h
+                    w = box.get("width", 0) / img_w
+                    h = box.get("height", 0) / img_h
+                    ft.write(f"{cls_id} {x:.17f} {y:.17f} {w:.17f} {h:.17f}\n")
+
+            seq += 1
+
+        QMessageBox.information(self, "Concluído", f"{seq} sínteses geradas e salvas em: {self.current_dir}")

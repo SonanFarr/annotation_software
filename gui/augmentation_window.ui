@@ -110,11 +110,18 @@
           <item row="6" column="0">
            <widget class="QPushButton" name="btn_trocar_subcolunas">
             <property name="text">
-             <string>Trocar Subcolunas</string>
+             <string>Sintetizar Classes</string>
             </property>
            </widget>
           </item>
-          <item row="7" column="0" colspan="2">
+          <item row="7" column="0">
+            <widget class="QPushButton" name="btn_ind_sintese">
+             <property name="text">
+               <string>Gerar Indeterminado</string>
+             </property>
+            </widget>
+          </item>
+          <item row="8" column="0" colspan="2">
            <widget class="QTableWidget" name="table_class"/>
           </item>
          </layout>
