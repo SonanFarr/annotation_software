@@ -853,7 +853,23 @@ class DataAugmentationWindow(QMainWindow):
 
         # seleciona aleatoriamente as desejadas
         if qtd < len(combos):
-            combos = random.sample(combos, qtd)
+            #combos = random.sample(combos, qtd)
+            
+            if num_alternativas == 3:
+                prioridade_idx = [1, 2]
+            else:
+                prioridade_idx = [1, 2, 5]
+
+            prioritarios = [c for c in combos if any(c[i] == 1 for i in prioridade_idx)]
+            outros = [c for c in combos if c not in prioritarios]
+
+            escolhidos = []
+            if len(prioritarios) >= qtd:
+                escolhidos = random.sample(prioritarios, qtd)
+            else:
+                escolhidos = prioritarios + random.sample(outros, qtd - len(prioritarios))
+
+            combos = escolhidos
 
         nome_original = os.path.splitext(image_filename)[0]
         seq = 0
